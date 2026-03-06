@@ -173,6 +173,12 @@ export default function App() {
     }
   };
 
+  // Clock formatter helper used in both inline mobile clocks
+  const formatClock = (seconds: number) => {
+    const s = Math.max(0, seconds);
+    return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+  };
+
   // Stable ref for the AI move callback
   const makeMoveRef = useRef(gameState.makeMove);
   makeMoveRef.current = gameState.makeMove;
@@ -288,282 +294,212 @@ export default function App() {
             />
           </div>
         ) : (
-          // Game View (Local or Connected Multiplayer)
-          <>
-            {/* ══════════════════════════════════════════════════════
-                MOBILE LAYOUT  (< lg)  – Game-First, no scroll
-                ══════════════════════════════════════════════════════ */}
-            <div className="flex flex-col w-full lg:hidden gap-1 px-1">
+          // Game View — SINGLE component tree (no duplicate mounts!)
+          // Mobile: flex-col with order classes for game-first hierarchy.
+          // Desktop (lg+): CSS grid 3 columns. Only ONE ChessBoard ever mounted.
+          <div className="flex flex-col lg:grid lg:grid-cols-[280px_auto_280px] gap-3 lg:gap-8 w-full max-w-[1200px]">
 
-              {/* Room bar (multiplayer) */}
-              {appMode === 'multiplayer' && socket.remoteState && (
-                <div className="flex justify-between items-center py-1 px-1 mb-1">
-                  <span className="px-2.5 py-0.5 rounded-full bg-accent text-white text-xs font-bold">
-                    Room: <span className="font-mono tracking-widest">{socket.roomId}</span>
-                  </span>
-                  <button onClick={handleCopyInvite} className="text-xs text-accent font-medium">🔗 Invite</button>
-                </div>
-              )}
+            {/* ── Helper: format seconds as M:SS ─── */}
+            {/* (defined as a const above the return, see App.tsx) */}
 
-              {/* OPPONENT row (clock + name) — above board */}
-              {appMode === 'multiplayer' && socket.isOnline && (
-                <div className="flex items-center gap-2 px-1 py-1">
-                  <div className="w-4 h-4 rounded-full border-2 border-border flex-shrink-0"
-                    style={{ backgroundColor: boardOrientation === 'white' ? '#1a1a1a' : '#f5f5f5' }} />
-                  <span className="text-sm font-semibold text-text-primary truncate flex-1">
-                    {boardOrientation === 'white'
-                      ? (socket.remoteState?.playerBlack?.name || 'Opponent')
-                      : (socket.remoteState?.playerWhite?.name || 'Opponent')}
-                  </span>
-                  {/* Opponent clock inline */}
-                  <span className={`font-mono text-lg font-bold tabular-nums ${(boardOrientation === 'white' ? clockBlack : clockWhite) <= 30
-                      ? 'text-red-400'
-                      : (boardOrientation === 'white' ? gameState.turn === 'b' : gameState.turn === 'w')
-                        ? 'text-accent'
-                        : 'text-text-secondary'
-                    }`}>
-                    {(() => {
-                      const s = boardOrientation === 'white' ? clockBlack : clockWhite;
-                      return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
-                    })()}
-                  </span>
-                </div>
-              )}
-
-              {/* BOARD — full width */}
-              <div className="relative w-full flex justify-center">
-                {appMode === 'multiplayer' && socket.role === 'spectator' && (
-                  <div className="absolute z-10 top-2 right-2 pointer-events-none">
-                    <span className="bg-surface/90 text-text-primary px-2 py-1 rounded-full text-xs font-bold border border-border">👀</span>
-                  </div>
-                )}
-                <ChessBoard
-                  gameState={gameState}
-                  boardOrientation={boardOrientation}
-                  theme={theme}
-                  playerRole={appMode === 'multiplayer' ? socket.role : null}
-                />
-                {gameState.pendingPromotion && (
-                  <PromotionOverlay
-                    pending={gameState.pendingPromotion}
-                    onConfirm={gameState.confirmPromotion}
-                    onCancel={gameState.cancelPromotion}
-                  />
-                )}
+            {/* ══ MOBILE-ONLY: room bar ══ */}
+            {appMode === 'multiplayer' && socket.remoteState && (
+              <div className="flex justify-between items-center px-1 lg:hidden order-first">
+                <span className="px-2.5 py-0.5 rounded-full bg-accent text-white text-xs font-bold">
+                  Room: <span className="font-mono">{socket.roomId}</span>
+                </span>
+                <button onClick={handleCopyInvite} className="text-xs text-accent font-medium">🔗 Invite</button>
               </div>
+            )}
 
-              {/* PLAYER row (name + clock + turn) — below board */}
-              <div className="flex items-center gap-2 px-1 py-1">
-                <div className="w-4 h-4 rounded-full border-2 border-border flex-shrink-0"
-                  style={{ backgroundColor: boardOrientation === 'white' ? '#f5f5f5' : '#1a1a1a' }} />
+            {/* ══ MOBILE-ONLY: opponent row (above board) ══ */}
+            {appMode === 'multiplayer' && socket.isOnline && (
+              <div className="flex items-center gap-2 px-1 lg:hidden">
+                <div className="w-4 h-4 rounded-full border-2 border-border shrink-0"
+                  style={{ backgroundColor: boardOrientation === 'white' ? '#1a1a1a' : '#f5f5f5' }} />
                 <span className="text-sm font-semibold text-text-primary truncate flex-1">
-                  {appMode === 'multiplayer'
-                    ? (boardOrientation === 'white'
-                      ? (socket.remoteState?.playerWhite?.name || 'You')
-                      : (socket.remoteState?.playerBlack?.name || 'You'))
-                    : 'You'}
+                  {boardOrientation === 'white'
+                    ? (socket.remoteState?.playerBlack?.name ?? 'Opponent')
+                    : (socket.remoteState?.playerWhite?.name ?? 'Opponent')}
                 </span>
-                {/* Turn indicator pill */}
-                <span className={`text-xs px-2 py-0.5 rounded-full font-bold transition-all ${(boardOrientation === 'white' ? gameState.turn === 'w' : gameState.turn === 'b')
-                    ? 'bg-accent text-white'
-                    : 'bg-surface-raised text-text-muted border border-border'
+                <span className={`font-mono text-lg font-bold tabular-nums ${(boardOrientation === 'white' ? clockBlack : clockWhite) <= 30 ? 'text-red-400'
+                  : (boardOrientation === 'white' ? gameState.turn === 'b' : gameState.turn === 'w') ? 'text-accent'
+                    : 'text-text-secondary'
                   }`}>
-                  {(boardOrientation === 'white' ? gameState.turn === 'w' : gameState.turn === 'b') ? '▶ Your turn' : 'Waiting…'}
+                  {formatClock(boardOrientation === 'white' ? clockBlack : clockWhite)}
                 </span>
-                {/* Player clock inline */}
-                {appMode === 'multiplayer' && socket.isOnline && (
-                  <span className={`font-mono text-lg font-bold tabular-nums ${(boardOrientation === 'white' ? clockWhite : clockBlack) <= 30
-                      ? 'text-red-400'
-                      : (boardOrientation === 'white' ? gameState.turn === 'w' : gameState.turn === 'b')
-                        ? 'text-accent'
-                        : 'text-text-secondary'
-                    }`}>
-                    {(() => {
-                      const s = boardOrientation === 'white' ? clockWhite : clockBlack;
-                      return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
-                    })()}
-                  </span>
-                )}
               </div>
+            )}
 
-              {/* Separator */}
-              <div className="border-t border-border mx-1 my-1" />
-
-              {/* COMPACT ACTIONS — 3 buttons in a row */}
-              <div className="grid grid-cols-3 gap-2 px-1">
-                <button
-                  onClick={handleNewGame}
-                  className="py-2 rounded-lg text-xs font-bold bg-accent text-white hover:bg-accent/90 transition-colors"
-                >✦ New</button>
-                <button
-                  onClick={handleUndo}
-                  disabled={appMode !== 'local' || gameState.moveHistory.length === 0}
-                  className="py-2 rounded-lg text-xs font-bold bg-surface-raised border border-border text-text-primary disabled:opacity-40 transition-colors"
-                >↶ Undo</button>
-                <button
-                  onClick={flipBoard}
-                  className="py-2 rounded-lg text-xs font-bold bg-accent/15 text-accent border border-accent/25 transition-colors"
-                >⇅ Flip</button>
-              </div>
-
-              {/* Captured pieces (compact row) */}
-              <div className="flex gap-3 px-2 py-1 text-xs text-text-muted">
-                <CapturedPieces moveHistory={gameState.moveHistory} color="w" />
-                <CapturedPieces moveHistory={gameState.moveHistory} color="b" />
-              </div>
-
-              {/* Move History — short scroll */}
-              <div className="px-1">
-                <MoveHistory moves={gameState.moveHistory} />
-              </div>
-
-              {/* SETTINGS at the bottom */}
-              <div className="px-1 pb-2">
-                <GameControls
-                  onNewGame={handleNewGame}
-                  onUndo={handleUndo}
-                  onFlipBoard={flipBoard}
-                  canUndo={appMode === 'local' ? gameState.moveHistory.length > 0 : false}
-                  aiEnabled={appMode === 'local' ? aiEnabled : false}
-                  onToggleAi={handleToggleAi}
-                  aiLevel={aiLevel}
-                  onAiLevelChange={setAiLevel}
-                  theme={theme}
-                  onThemeChange={setTheme}
-                />
-              </div>
+            {/* ══════════════════════ LEFT COLUMN (desktop) ════════════════════ */}
+            <div className="flex flex-col gap-4 lg:order-1 order-last">
+              <GameControls
+                onNewGame={handleNewGame}
+                onUndo={handleUndo}
+                onFlipBoard={flipBoard}
+                canUndo={appMode === 'local' ? gameState.moveHistory.length > 0 : false}
+                aiEnabled={appMode === 'local' ? aiEnabled : false}
+                onToggleAi={handleToggleAi}
+                aiLevel={aiLevel}
+                onAiLevelChange={setAiLevel}
+                theme={theme}
+                onThemeChange={setTheme}
+              />
             </div>
 
-            {/* ══════════════════════════════════════════════════════
-                DESKTOP LAYOUT  (≥ lg)  – 3-column symmetric grid
-                ══════════════════════════════════════════════════════ */}
-            <div className="hidden lg:grid lg:grid-cols-[280px_auto_280px] gap-8 w-full max-w-[1200px] items-start">
-
-              {/* LEFT: Actions & Controls */}
-              <div className="flex flex-col gap-4">
-                <GameControls
-                  onNewGame={handleNewGame}
-                  onUndo={handleUndo}
-                  onFlipBoard={flipBoard}
-                  canUndo={appMode === 'local' ? gameState.moveHistory.length > 0 : false}
-                  aiEnabled={appMode === 'local' ? aiEnabled : false}
-                  onToggleAi={handleToggleAi}
-                  aiLevel={aiLevel}
-                  onAiLevelChange={setAiLevel}
-                  theme={theme}
-                  onThemeChange={setTheme}
-                />
-              </div>
-
-              {/* CENTER: Board */}
-              <div className="shrink-0 relative flex flex-col items-center">
-                {appMode === 'multiplayer' && socket.remoteState && (
-                  <div className="w-full flex justify-between items-center px-1 mb-3">
-                    <div className="px-3 py-1 rounded-full bg-accent text-white text-xs font-bold shadow-md">
-                      Room: <span className="font-mono tracking-widest">{socket.roomId}</span>
-                    </div>
-                    <button onClick={handleCopyInvite} className="text-xs text-accent hover:underline font-medium flex items-center gap-1">
-                      <span>🔗</span> Copy Invite Link
-                    </button>
+            {/* ══════════════════════ CENTER COLUMN: Board ═════════════════════ */}
+            <div className="shrink-0 relative flex flex-col items-center lg:order-2 order-first">
+              {/* Desktop-only: room bar */}
+              {appMode === 'multiplayer' && socket.remoteState && (
+                <div className="hidden lg:flex w-full justify-between items-center px-1 mb-3">
+                  <div className="px-3 py-1 rounded-full bg-accent text-white text-xs font-bold shadow-md">
+                    Room: <span className="font-mono tracking-widest">{socket.roomId}</span>
                   </div>
-                )}
-                {appMode === 'multiplayer' && socket.role === 'spectator' && (
-                  <div className="absolute z-10 top-12 right-2 pointer-events-none">
-                    <span className="bg-surface/90 text-text-primary px-3 py-1.5 rounded-full text-xs font-bold shadow-lg border border-border backdrop-blur-sm">
-                      👀 Spectating
-                    </span>
-                  </div>
-                )}
-                <ChessBoard
-                  gameState={gameState}
-                  boardOrientation={boardOrientation}
-                  theme={theme}
-                  playerRole={appMode === 'multiplayer' ? socket.role : null}
+                  <button onClick={handleCopyInvite} className="text-xs text-accent hover:underline font-medium flex items-center gap-1">
+                    🔗 Copy Invite Link
+                  </button>
+                </div>
+              )}
+
+              {appMode === 'multiplayer' && socket.role === 'spectator' && (
+                <div className="absolute z-10 top-12 right-2 pointer-events-none">
+                  <span className="bg-surface/90 text-text-primary px-3 py-1.5 rounded-full text-xs font-bold shadow-lg border border-border backdrop-blur-sm">
+                    👀 Spectating
+                  </span>
+                </div>
+              )}
+
+              {/* THE ONE AND ONLY ChessBoard */}
+              <ChessBoard
+                gameState={gameState}
+                boardOrientation={boardOrientation}
+                theme={theme}
+                playerRole={appMode === 'multiplayer' ? socket.role : null}
+              />
+
+              {gameState.pendingPromotion && (
+                <PromotionOverlay
+                  pending={gameState.pendingPromotion}
+                  onConfirm={gameState.confirmPromotion}
+                  onCancel={gameState.cancelPromotion}
                 />
-                {gameState.pendingPromotion && (
-                  <PromotionOverlay
-                    pending={gameState.pendingPromotion}
-                    onConfirm={gameState.confirmPromotion}
-                    onCancel={gameState.cancelPromotion}
+              )}
+            </div>
+
+            {/* ══ MOBILE-ONLY: player row (below board) ══ */}
+            <div className="flex items-center gap-2 px-1 lg:hidden">
+              <div className="w-4 h-4 rounded-full border-2 border-border shrink-0"
+                style={{ backgroundColor: boardOrientation === 'white' ? '#f5f5f5' : '#1a1a1a' }} />
+              <span className="text-sm font-semibold text-text-primary truncate flex-1">
+                {appMode === 'multiplayer'
+                  ? (boardOrientation === 'white' ? (socket.remoteState?.playerWhite?.name ?? 'You') : (socket.remoteState?.playerBlack?.name ?? 'You'))
+                  : 'You'}
+              </span>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${(boardOrientation === 'white' ? gameState.turn === 'w' : gameState.turn === 'b')
+                ? 'bg-accent text-white' : 'bg-surface-raised text-text-muted border border-border'
+                }`}>
+                {(boardOrientation === 'white' ? gameState.turn === 'w' : gameState.turn === 'b') ? '▶ Your turn' : 'Waiting…'}
+              </span>
+              {appMode === 'multiplayer' && socket.isOnline && (
+                <span className={`font-mono text-lg font-bold tabular-nums ${(boardOrientation === 'white' ? clockWhite : clockBlack) <= 30 ? 'text-red-400'
+                  : (boardOrientation === 'white' ? gameState.turn === 'w' : gameState.turn === 'b') ? 'text-accent'
+                    : 'text-text-secondary'
+                  }`}>
+                  {formatClock(boardOrientation === 'white' ? clockWhite : clockBlack)}
+                </span>
+              )}
+            </div>
+
+            {/* ══ MOBILE-ONLY: compact action buttons ══ */}
+            <div className="grid grid-cols-3 gap-2 px-1 lg:hidden">
+              <button onClick={handleNewGame}
+                className="py-2 rounded-lg text-xs font-bold bg-accent text-white">✦ New</button>
+              <button onClick={handleUndo}
+                disabled={appMode !== 'local' || gameState.moveHistory.length === 0}
+                className="py-2 rounded-lg text-xs font-bold bg-surface-raised border border-border text-text-primary disabled:opacity-40">↶ Undo</button>
+              <button onClick={flipBoard}
+                className="py-2 rounded-lg text-xs font-bold bg-accent/15 text-accent border border-accent/25">⇅ Flip</button>
+            </div>
+
+            {/* ══════════════════════ RIGHT COLUMN (desktop + mobile) ══════════ */}
+            <div className="flex flex-col gap-4 lg:order-3">
+
+              {/* Desktop clocks */}
+              {appMode === 'multiplayer' && socket.isOnline && (
+                <div className="flex flex-col gap-2">
+                  <ChessClock
+                    timeSeconds={boardOrientation === 'white' ? clockBlack : clockWhite}
+                    isActive={boardOrientation === 'white' ? gameState.turn === 'b' : gameState.turn === 'w'}
+                    label={boardOrientation === 'white' ? 'Opponent' : 'You'}
+                    color={boardOrientation === 'white' ? 'b' : 'w'}
+                    playerName={boardOrientation === 'white'
+                      ? socket.remoteState?.playerBlack?.name
+                      : socket.remoteState?.playerWhite?.name}
                   />
-                )}
-              </div>
+                  <ChessClock
+                    timeSeconds={boardOrientation === 'white' ? clockWhite : clockBlack}
+                    isActive={boardOrientation === 'white' ? gameState.turn === 'w' : gameState.turn === 'b'}
+                    label={boardOrientation === 'white' ? 'You' : 'Opponent'}
+                    color={boardOrientation === 'white' ? 'w' : 'b'}
+                    playerName={boardOrientation === 'white'
+                      ? socket.remoteState?.playerWhite?.name
+                      : socket.remoteState?.playerBlack?.name}
+                  />
+                </div>
+              )}
 
-              {/* RIGHT: Game Info */}
-              <div className="flex flex-col gap-4">
-                {appMode === 'multiplayer' && socket.isOnline && (
-                  <div className="flex flex-col gap-2">
-                    <ChessClock
-                      timeSeconds={boardOrientation === 'white' ? clockBlack : clockWhite}
-                      isActive={boardOrientation === 'white' ? gameState.turn === 'b' : gameState.turn === 'w'}
-                      label={boardOrientation === 'white' ? 'Opponent' : 'You'}
-                      color={boardOrientation === 'white' ? 'b' : 'w'}
-                      playerName={boardOrientation === 'white'
-                        ? socket.remoteState?.playerBlack?.name
-                        : socket.remoteState?.playerWhite?.name}
-                    />
-                    <ChessClock
-                      timeSeconds={boardOrientation === 'white' ? clockWhite : clockBlack}
-                      isActive={boardOrientation === 'white' ? gameState.turn === 'w' : gameState.turn === 'b'}
-                      label={boardOrientation === 'white' ? 'You' : 'Opponent'}
-                      color={boardOrientation === 'white' ? 'w' : 'b'}
-                      playerName={boardOrientation === 'white'
-                        ? socket.remoteState?.playerWhite?.name
-                        : socket.remoteState?.playerBlack?.name}
-                    />
-                  </div>
-                )}
-                <GameInfo
-                  gameState={gameState}
-                  aiEnabled={appMode === 'local' ? aiEnabled : false}
-                  isAiThinking={engine.isThinking}
-                />
-                {appMode === 'multiplayer' && socket.remoteState && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="rounded-xl p-4 backdrop-blur-md border border-border text-sm flex flex-col gap-2"
-                    style={{ background: 'var(--color-surface-overlay)' }}
-                  >
-                    <div className="flex justify-between items-center border-b border-border pb-2">
-                      <span className="font-semibold text-text-secondary">White</span>
-                      <span className={`font-bold ${socket.remoteState.playerWhite?.connected ? 'text-text-primary' : 'text-text-muted italic'}`}>
-                        {socket.remoteState.playerWhite?.name || 'Waiting...'}
-                        {!socket.remoteState.playerWhite?.connected && socket.remoteState.playerWhite?.name && ' (Offline)'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center border-b border-border pb-2">
-                      <span className="font-semibold text-text-secondary">Black</span>
-                      <span className={`font-bold ${socket.remoteState.playerBlack?.connected ? 'text-text-primary' : 'text-text-muted italic'}`}>
-                        {socket.remoteState.playerBlack?.name || 'Waiting...'}
-                        {!socket.remoteState.playerBlack?.connected && socket.remoteState.playerBlack?.name && ' (Offline)'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center pt-1 text-xs text-text-muted">
-                      <span>Spectators: {socket.remoteState.spectatorCount}</span>
-                      <button onClick={socket.leaveRoom} className="text-red-400 hover:text-red-300 transition-colors">Leave Room</button>
-                    </div>
-                  </motion.div>
-                )}
+              <GameInfo
+                gameState={gameState}
+                aiEnabled={appMode === 'local' ? aiEnabled : false}
+                isAiThinking={engine.isThinking}
+              />
+
+              {appMode === 'multiplayer' && socket.remoteState && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: 0.05 }}
-                  className="rounded-xl p-4 backdrop-blur-md border border-border"
+                  className="rounded-xl p-4 backdrop-blur-md border border-border text-sm flex flex-col gap-2"
                   style={{ background: 'var(--color-surface-overlay)' }}
                 >
-                  <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-2">Captured Pieces</h3>
-                  <div className="space-y-1">
-                    <CapturedPieces moveHistory={gameState.moveHistory} color="w" />
-                    <CapturedPieces moveHistory={gameState.moveHistory} color="b" />
+                  <div className="flex justify-between items-center border-b border-border pb-2">
+                    <span className="font-semibold text-text-secondary">White</span>
+                    <span className={`font-bold ${socket.remoteState.playerWhite?.connected ? 'text-text-primary' : 'text-text-muted italic'}`}>
+                      {socket.remoteState.playerWhite?.name || 'Waiting...'}
+                      {!socket.remoteState.playerWhite?.connected && socket.remoteState.playerWhite?.name && ' (Offline)'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-border pb-2">
+                    <span className="font-semibold text-text-secondary">Black</span>
+                    <span className={`font-bold ${socket.remoteState.playerBlack?.connected ? 'text-text-primary' : 'text-text-muted italic'}`}>
+                      {socket.remoteState.playerBlack?.name || 'Waiting...'}
+                      {!socket.remoteState.playerBlack?.connected && socket.remoteState.playerBlack?.name && ' (Offline)'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center pt-1 text-xs text-text-muted">
+                    <span>Spectators: {socket.remoteState.spectatorCount}</span>
+                    <button onClick={socket.leaveRoom} className="text-red-400 hover:text-red-300 transition-colors">Leave Room</button>
                   </div>
                 </motion.div>
-                <MoveHistory moves={gameState.moveHistory} />
-              </div>
+              )}
 
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.05 }}
+                className="rounded-xl p-4 backdrop-blur-md border border-border"
+                style={{ background: 'var(--color-surface-overlay)' }}
+              >
+                <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-2">Captured Pieces</h3>
+                <div className="space-y-1">
+                  <CapturedPieces moveHistory={gameState.moveHistory} color="w" />
+                  <CapturedPieces moveHistory={gameState.moveHistory} color="b" />
+                </div>
+              </motion.div>
+
+              <MoveHistory moves={gameState.moveHistory} />
             </div>
-          </>
 
+          </div>
 
         )}
       </main>
