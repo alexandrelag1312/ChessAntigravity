@@ -57,12 +57,24 @@ export default function App() {
     }
   }, [socket.role, appMode]);
 
-  // Sync remote state to local state
+  // Sync remote state to local state (full payload)
   useEffect(() => {
     if (appMode === 'multiplayer' && socket.remoteState) {
       gameState.loadState(socket.remoteState.fen, socket.remoteState.history);
     }
   }, [socket.remoteState, appMode]);
+
+  // Sync explicitly received piece-by-piece moves
+  const stableMakeMove = gameState.makeMove;
+  useEffect(() => {
+    if (appMode === 'multiplayer' && socket.lastReceivedMove) {
+      stableMakeMove(
+        socket.lastReceivedMove.from,
+        socket.lastReceivedMove.to,
+        socket.lastReceivedMove.promotion
+      );
+    }
+  }, [socket.lastReceivedMove, appMode, stableMakeMove]);
 
   // Copy Invite Link Helper
   const handleCopyInvite = () => {
@@ -237,6 +249,7 @@ export default function App() {
                 gameState={activeGameState}
                 boardOrientation={boardOrientation}
                 theme={theme}
+                playerRole={appMode === 'multiplayer' ? socket.role : null}
               />
             </div>
 

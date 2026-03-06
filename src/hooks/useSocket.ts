@@ -33,6 +33,7 @@ export function useSocket() {
     const [remoteState, setRemoteState] = useState<RemoteGameState | null>(null);
     const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
     const [error, setError] = useState<string | null>(null);
+    const [lastReceivedMove, setLastReceivedMove] = useState<{ from: string; to: string; promotion?: string; timestamp: number } | null>(null);
 
     const socketRef = useRef<Socket | null>(null);
 
@@ -93,6 +94,10 @@ export function useSocket() {
         // ── State Sync ──
         newSocket.on('sync_state', (state: RemoteGameState) => {
             setRemoteState(state);
+        });
+
+        newSocket.on('move_received', (move: { from: string; to: string; promotion?: string }) => {
+            setLastReceivedMove({ ...move, timestamp: Date.now() });
         });
 
         newSocket.on('player_joined', (data: { role: string; name: string; state: RemoteGameState }) => {
@@ -190,5 +195,6 @@ export function useSocket() {
         leaveRoom,
         emitMove,
         sendChat,
+        lastReceivedMove,
     };
 }

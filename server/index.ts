@@ -239,7 +239,10 @@ io.on('connection', (socket) => {
                 return;
             }
 
-            // Broadcast to entire room (including sender for confirmation)
+            // Broadcast exactly what the user requested to the OTHER player
+            socket.to(roomId).emit('move_received', { from: data.from, to: data.to, promotion: data.promotion });
+
+            // Broadcast full state to everyone (including sender and spectators) to ensure true sync
             io.to(roomId).emit('sync_state', getRoomSnapshot(room));
 
             callback?.({ success: true });

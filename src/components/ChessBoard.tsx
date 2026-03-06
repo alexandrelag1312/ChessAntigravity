@@ -15,9 +15,10 @@ interface ChessBoardProps {
     gameState: ChessGameState;
     boardOrientation: 'white' | 'black';
     theme: BoardTheme;
+    playerRole?: 'white' | 'black' | 'spectator' | null;
 }
 
-export default function ChessBoard({ gameState, boardOrientation, theme }: ChessBoardProps) {
+export default function ChessBoard({ gameState, boardOrientation, theme, playerRole }: ChessBoardProps) {
     const {
         position,
         lastMove,
@@ -62,16 +63,21 @@ export default function ChessBoard({ gameState, boardOrientation, theme }: Chess
         getLegalMoveStyles(legalMoveSquares, position)
     );
 
-    // ── Drag-and-drop handler ───────────────────────────────────────
-    function onPieceDrop({
-        sourceSquare,
-        targetSquare,
-    }: {
-        piece: unknown;
-        sourceSquare: string;
-        targetSquare: string | null;
-    }): boolean {
+    function onPieceDrop(args: any): boolean {
+        const { sourceSquare, targetSquare, piece } = args;
         if (isGameOver || !targetSquare) return false;
+
+        const pieceStr = typeof piece === 'string' ? piece : (piece?.pieceType || String(piece || ''));
+
+        // Multiplayer Role Locking: Enforce that the user can only grab their own color
+        if (playerRole === 'spectator') return false;
+        if (playerRole === 'white' && pieceStr.charAt(0) !== 'w') return false;
+        if (playerRole === 'black' && pieceStr.charAt(0) !== 'b') return false;
+
+        // Guard: Prevent playing out of turn explicitly
+        if (playerRole === 'white' && gameState.turn !== 'w') return false;
+        if (playerRole === 'black' && gameState.turn !== 'b') return false;
+
         // Clear any click-to-move selection when a drag completes
         clearSelection();
         return makeMove(sourceSquare, targetSquare);
@@ -79,9 +85,15 @@ export default function ChessBoard({ gameState, boardOrientation, theme }: Chess
 
     // ── Click handler — unified for pieces and empty squares ────────
     function onSquareClick({ piece, square }: { piece: { pieceType: string } | null; square: string }) {
-        // Translate react-chessboard v5 piece format to color prefix
-        // piece.pieceType is like "wP", "bK" etc.
         const pieceStr = piece?.pieceType ?? null;
+
+        // Multiplayer Role Locking for Click-to-Move
+        if (playerRole === 'spectator') return;
+        if (pieceStr) {
+            if (playerRole === 'white' && pieceStr.charAt(0) !== 'w' && !gameState.selectedSquare) return;
+            if (playerRole === 'black' && pieceStr.charAt(0) !== 'b' && !gameState.selectedSquare) return;
+        }
+
         handleSquareClick(square, pieceStr);
     }
 
