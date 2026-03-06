@@ -1,4 +1,4 @@
-// Version 2.1
+// Version 2.1 — Trigger Build
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useChessGame } from './hooks/useChessGame';
 import { useStockfish } from './hooks/useStockfish';
