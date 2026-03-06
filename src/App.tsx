@@ -206,7 +206,7 @@ export default function App() {
           <span className="bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 bg-clip-text text-transparent">
             Chess
           </span>
-          <span className="text-text-secondary font-light">Antigravity</span>
+          <span className="text-text-secondary font-light">Antigravity v2</span>
         </h1>
         <p className="text-text-muted text-sm mt-1">
           {appMode === 'local' ? 'A premium browser chess experience' : 'Party Mode — Live Multiplayer'}
