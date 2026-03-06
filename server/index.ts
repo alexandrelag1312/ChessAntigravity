@@ -175,14 +175,15 @@ io.on('connection', (socket) => {
 
         // Normal join logic
         let role: 'white' | 'black' | 'spectator';
+        let assignedColor: 'w' | 'b' | null = null;
         if (!room.playerWhite) {
             room.playerWhite = { socketId: socket.id, name: data.playerName || 'White' };
             role = 'white';
-            io.to(socket.id).emit('assign_color', 'w');
+            assignedColor = 'w';
         } else if (!room.playerBlack) {
             room.playerBlack = { socketId: socket.id, name: data.playerName || 'Black' };
             role = 'black';
-            io.to(socket.id).emit('assign_color', 'b');
+            assignedColor = 'b';
         } else {
             // Room is full — join as spectator
             room.spectators.set(socket.id, data.playerName || 'Spectator');
@@ -191,6 +192,10 @@ io.on('connection', (socket) => {
 
         socketToRoom.set(socket.id, roomId);
         socket.join(roomId);
+
+        if (assignedColor) {
+            io.to(socket.id).emit('assign_color', assignedColor);
+        }
 
         // Notify everyone
         io.to(roomId).emit('player_joined', {

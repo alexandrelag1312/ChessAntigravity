@@ -175,7 +175,7 @@ export default function App() {
             onClick={() => setAppMode(prev => prev === 'local' ? 'multiplayer' : 'local')}
             className="px-4 py-2 rounded-lg text-sm font-bold bg-surface-raised border border-border text-accent shadow-sm hover:scale-105 transition-transform"
           >
-            {appMode === 'local' ? '🌐 Switch to Party Mode' : '🏡 Local Play'}
+            {gameState.isOnline ? '🌐 Online Play' : '🏡 Local Play'}
           </button>
         </div>
         <h1 className="text-3xl lg:text-4xl font-bold tracking-tight cursor-pointer" onClick={() => window.location.href = '/'}>
@@ -194,7 +194,7 @@ export default function App() {
             onClick={() => setAppMode(prev => prev === 'local' ? 'multiplayer' : 'local')}
             className="px-4 py-1.5 rounded-full text-xs font-bold bg-surface-raised border border-border text-accent shadow-sm"
           >
-            {appMode === 'local' ? '🌐 Switch to Party Mode' : '🏡 Local Play'}
+            {gameState.isOnline ? '🌐 Online Play' : '🏡 Local Play'}
           </button>
         </div>
       </motion.header>

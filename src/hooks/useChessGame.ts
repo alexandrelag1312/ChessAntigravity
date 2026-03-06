@@ -117,6 +117,7 @@ export interface ChessGameState {
     loadState: (fen: string, history: any[]) => void;
     onDrop: (sourceSquare: string, targetSquare: string, piece: string) => boolean;
     playerColor: 'w' | 'b' | null;
+    isOnline: boolean;
 }
 
 // ─── Hook ───────────────────────────────────────────────────────────
@@ -137,6 +138,7 @@ export function useChessGame(socket: Socket | null = null): ChessGameState {
     const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
     const [legalMoveSquares, setLegalMoveSquares] = useState<Square[]>([]);
     const [playerColor, setPlayerColor] = useState<'w' | 'b' | null>(null);
+    const [isOnline, setIsOnline] = useState(false);
     const hasPlayedStartSound = useRef(false);
 
     const syncState = useCallback(() => {
@@ -153,6 +155,7 @@ export function useChessGame(socket: Socket | null = null): ChessGameState {
         socket.on('assign_color', (color: 'w' | 'b') => {
             console.log("Ma couleur est :", color);
             setPlayerColor(color);
+            setIsOnline(true);
         });
 
         socket.on('move_received', (moveData: { from: string; to: string; promotion?: string }) => {
@@ -362,5 +365,6 @@ export function useChessGame(socket: Socket | null = null): ChessGameState {
         loadState,
         onDrop,
         playerColor,
+        isOnline,
     };
 }
