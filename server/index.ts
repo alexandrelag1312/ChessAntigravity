@@ -356,8 +356,8 @@ io.on('connection', (socket) => {
 
 // ─── Start ──────────────────────────────────────────────────────────
 const PORT = parseInt(process.env.PORT || '3000', 10);
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`\n  ♟  ChessAntigravity Server`);
-    console.log(`  🌐 http://localhost:${PORT}`);
+    console.log(`  🌐 http://0.0.0.0:${PORT}`);
     console.log(`  🔌 Socket.io ready with connectionStateRecovery\n`);
 });
