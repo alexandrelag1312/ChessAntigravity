@@ -22,10 +22,14 @@ interface RoomState {
     game: Chess;
     playerWhite: Player | null;
     playerBlack: Player | null;
-    spectators: Map<string, string>; // socketId → name
+    spectators: Map<string, string>;
     chatHistory: ChatMessage[];
     casualMode: boolean;
     createdAt: number;
+    clockWhite: number;  // seconds remaining
+    clockBlack: number;  // seconds remaining
+    clockStarted: boolean; // true after first move
+    lastMoveAt: number | null; // timestamp of last move
 }
 
 // ─── Room Management ────────────────────────────────────────────────
@@ -51,6 +55,17 @@ function getRoomRole(room: RoomState, socketId: string): 'white' | 'black' | 'sp
 }
 
 function getRoomSnapshot(room: RoomState) {
+    // Calculate current elapsed time for the active clock
+    let clockWhite = room.clockWhite;
+    let clockBlack = room.clockBlack;
+    if (room.clockStarted && room.lastMoveAt) {
+        const elapsed = Math.floor((Date.now() - room.lastMoveAt) / 1000);
+        if (room.game.turn() === 'w') {
+            clockWhite = Math.max(0, clockWhite - elapsed);
+        } else {
+            clockBlack = Math.max(0, clockBlack - elapsed);
+        }
+    }
     return {
         roomId: room.roomId,
         fen: room.game.fen(),
@@ -65,7 +80,10 @@ function getRoomSnapshot(room: RoomState) {
         playerBlack: room.playerBlack ? { name: room.playerBlack.name, connected: !room.playerBlack.disconnectedAt } : null,
         spectatorCount: room.spectators.size,
         casualMode: room.casualMode,
-        chatHistory: room.chatHistory.slice(-50), // last 50 messages
+        chatHistory: room.chatHistory.slice(-50),
+        clockWhite,
+        clockBlack,
+        clockStarted: room.clockStarted,
     };
 }
 
@@ -118,6 +136,10 @@ io.on('connection', (socket) => {
             chatHistory: [],
             casualMode: data.casualMode ?? false,
             createdAt: Date.now(),
+            clockWhite: 10 * 60,
+            clockBlack: 10 * 60,
+            clockStarted: false,
+            lastMoveAt: null,
         };
         rooms.set(roomId, room);
         socketToRoom.set(socket.id, roomId);
@@ -257,13 +279,35 @@ io.on('connection', (socket) => {
                 return;
             }
 
+            // Update clocks
+            const now = Date.now();
+            if (!room.clockStarted) {
+                room.clockStarted = true;
+            } else if (room.lastMoveAt) {
+                const elapsed = Math.floor((now - room.lastMoveAt) / 1000);
+                // The player who JUST moved was the previous turn
+                if (move.color === 'w') {
+                    room.clockWhite = Math.max(0, room.clockWhite - elapsed);
+                } else {
+                    room.clockBlack = Math.max(0, room.clockBlack - elapsed);
+                }
+            }
+            room.lastMoveAt = now;
+
             console.log(`[move_made] Relaying move to room: ${roomId} | ${move.san} by ${role}`);
-            socket.to(roomId).emit('move_received', { from: data.from, to: data.to, promotion: data.promotion });
+            socket.to(roomId).emit('move_received', {
+                from: data.from,
+                to: data.to,
+                promotion: data.promotion,
+                clockWhite: room.clockWhite,
+                clockBlack: room.clockBlack,
+            });
 
             // Send updated board state to all OTHER players (not sender)
             socket.to(roomId).emit('sync_state', getRoomSnapshot(room));
 
-            callback?.({ success: true });
+            // Also return clocks to the sender via callback
+            callback?.({ success: true, clockWhite: room.clockWhite, clockBlack: room.clockBlack });
             console.log(`[move_made] ✅ ${roomId} ${move.san} by ${role} → relayed`);
         } catch {
             callback?.({ success: false, error: 'Invalid move' });

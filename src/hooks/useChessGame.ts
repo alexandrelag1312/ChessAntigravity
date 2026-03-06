@@ -101,6 +101,12 @@ export interface ChessGameOptions {
 }
 
 // ─── Exported Interface ─────────────────────────────────────────────
+export interface PendingPromotion {
+    from: string;
+    to: string;
+    color: 'w' | 'b';
+}
+
 export interface ChessGameState {
     position: string;
     turn: 'w' | 'b';
@@ -115,12 +121,16 @@ export interface ChessGameState {
     selectedSquare: Square | null;
     legalMoveSquares: Square[];
     makeMove: (from: string, to: string, promotion?: string) => boolean;
+    applyRemoteMove: (from: string, to: string, promotion?: string) => void;
     handleSquareClick: (square: string, piece: string | null) => void;
     undoMove: () => void;
     resetGame: () => void;
     clearSelection: () => void;
     loadState: (fen: string, history: any[]) => void;
     onDrop: (sourceSquare: string, targetSquare: string, piece: string) => boolean;
+    pendingPromotion: PendingPromotion | null;
+    confirmPromotion: (piece: 'q' | 'r' | 'b' | 'n') => void;
+    cancelPromotion: () => void;
     playerColor: 'w' | 'b' | null;
     isOnline: boolean;
 }
@@ -149,6 +159,7 @@ export function useChessGame(options: ChessGameOptions = {}): ChessGameState {
     });
     const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
     const [legalMoveSquares, setLegalMoveSquares] = useState<Square[]>([]);
+    const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
     const hasPlayedStartSound = useRef(false);
 
     const syncState = useCallback(() => {
@@ -217,7 +228,57 @@ export function useChessGame(options: ChessGameOptions = {}): ChessGameState {
         [syncState]
     );
 
-    // ── Click-to-move handler ─────────────────────────────────────────
+    // ── SILENT move applier for opponent moves from server ────────────
+    // CRITICAL: Does NOT call onMoveExecuted, so it will NOT emit back
+    // to the server, breaking the echo loop.
+    const applyRemoteMove = useCallback((from: string, to: string, promotion?: string) => {
+        const game = gameRef.current;
+        try {
+            const move = game.move({
+                from: from as Square,
+                to: to as Square,
+                promotion: promotion || 'q',
+            });
+            if (move) {
+                setLastMove({ from: move.from, to: move.to });
+                setSelectedSquare(null);
+                setLegalMoveSquares([]);
+                syncState();
+                // Audio for opponent move
+                if (game.isCheckmate() || game.isDraw() || game.isStalemate()) {
+                    playSound('gameEnd');
+                } else if (game.isCheck()) {
+                    playSound('check');
+                } else if (move.captured) {
+                    playSound('capture');
+                } else {
+                    playSound('move');
+                }
+            }
+        } catch { }
+    }, [syncState]);
+
+    // ── Promotion handlers ────────────────────────────────────────────
+    const confirmPromotion = useCallback((piece: 'q' | 'r' | 'b' | 'n') => {
+        if (!pendingPromotion) return;
+        makeMove(pendingPromotion.from, pendingPromotion.to, piece);
+        setPendingPromotion(null);
+    }, [pendingPromotion, makeMove]);
+
+    const cancelPromotion = useCallback(() => {
+        setPendingPromotion(null);
+        setSelectedSquare(null);
+        setLegalMoveSquares([]);
+    }, []);
+
+    // Handle click-to-move promotion detection
+    const handlePromoClick = (from: Square, to: Square, color: 'w' | 'b') => {
+        setPendingPromotion({ from, to, color });
+        setSelectedSquare(null);
+        setLegalMoveSquares([]);
+    };
+
+    // ── Click-to-move with promotion detection ────────────────────────
     const handleSquareClick = useCallback(
         (square: string, piece: string | null) => {
             if (isGameOver) return;
@@ -259,9 +320,19 @@ export function useChessGame(options: ChessGameOptions = {}): ChessGameState {
                     return;
                 }
 
-                // Sub-case 1b: Clicked on a legal destination → execute move
+                // Sub-case 1b: Clicked on a legal destination → check for promotion
                 if (legalMoveSquares.includes(sq)) {
-                    makeMove(selectedSquare, sq);
+                    const game = gameRef.current;
+                    const movingPiece = game.get(selectedSquare as Square);
+                    const isPromo =
+                        movingPiece?.type === 'p' &&
+                        ((movingPiece.color === 'w' && sq[1] === '8') ||
+                            (movingPiece.color === 'b' && sq[1] === '1'));
+                    if (isPromo) {
+                        handlePromoClick(selectedSquare, sq, movingPiece.color);
+                    } else {
+                        makeMove(selectedSquare, sq);
+                    }
                     return;
                 }
 
@@ -287,16 +358,20 @@ export function useChessGame(options: ChessGameOptions = {}): ChessGameState {
     const onDrop = useCallback((sourceSquare: string, targetSquare: string, piece: string) => {
         const game = gameRef.current;
 
-        // CRITICAL ROLE LOCK — only applies in online mode
         if (isOnline && playerColor) {
-            if (game.turn() !== playerColor) {
-                console.log(`[onDrop] BLOCKED: not your turn (turn=${game.turn()}, you=${playerColor})`);
-                return false;
-            }
-            if (piece.charAt(0) !== playerColor) {
-                console.log(`[onDrop] BLOCKED: not your piece (piece=${piece}, you=${playerColor})`);
-                return false;
-            }
+            if (game.turn() !== playerColor) return false;
+            if (piece.charAt(0) !== playerColor) return false;
+        }
+
+        // Detect promotion before executing
+        const pieceType = piece.charAt(1)?.toLowerCase();
+        const isWhitePromo = pieceType === 'p' && targetSquare[1] === '8' && piece[0] === 'w';
+        const isBlackPromo = pieceType === 'p' && targetSquare[1] === '1' && piece[0] === 'b';
+        if (isWhitePromo || isBlackPromo) {
+            setPendingPromotion({ from: sourceSquare, to: targetSquare, color: piece[0] as 'w' | 'b' });
+            setSelectedSquare(null);
+            setLegalMoveSquares([]);
+            return true; // Return true so the board doesn't snap back
         }
 
         return makeMove(sourceSquare, targetSquare);
@@ -359,12 +434,16 @@ export function useChessGame(options: ChessGameOptions = {}): ChessGameState {
         selectedSquare,
         legalMoveSquares,
         makeMove,
+        applyRemoteMove,
         handleSquareClick,
         undoMove,
         resetGame,
         clearSelection,
         loadState,
         onDrop,
+        pendingPromotion,
+        confirmPromotion,
+        cancelPromotion,
         playerColor,
         isOnline,
     };

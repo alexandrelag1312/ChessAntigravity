@@ -18,12 +18,15 @@ export interface RemoteGameState {
     isCheckmate: boolean;
     isDraw: boolean;
     isGameOver: boolean;
-    history: any[]; // verbose history
+    history: any[];
     playerWhite: { name: string; connected: boolean } | null;
     playerBlack: { name: string; connected: boolean } | null;
     spectatorCount: number;
     casualMode: boolean;
     chatHistory: ChatMessage[];
+    clockWhite?: number;
+    clockBlack?: number;
+    clockStarted?: boolean;
 }
 
 export function useSocket() {
@@ -33,7 +36,14 @@ export function useSocket() {
     const [remoteState, setRemoteState] = useState<RemoteGameState | null>(null);
     const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
     const [error, setError] = useState<string | null>(null);
-    const [lastReceivedMove, setLastReceivedMove] = useState<{ from: string; to: string; promotion?: string; timestamp: number } | null>(null);
+    const [lastReceivedMove, setLastReceivedMove] = useState<{
+        from: string;
+        to: string;
+        promotion?: string;
+        clockWhite?: number;
+        clockBlack?: number;
+        timestamp: number;
+    } | null>(null);
 
     // ── THE SINGLE SOURCE OF TRUTH for player identity ──────────────
     const [playerColor, setPlayerColor] = useState<'w' | 'b' | null>(null);
@@ -122,7 +132,7 @@ export function useSocket() {
         });
 
         // ── Move Sync — SINGLE HANDLER (no duplicate in useChessGame) ─
-        newSocket.on('move_received', (move: { from: string; to: string; promotion?: string }) => {
+        newSocket.on('move_received', (move: { from: string; to: string; promotion?: string; clockWhite?: number; clockBlack?: number }) => {
             console.log('[socket] move_received:', move);
             setLastReceivedMove({ ...move, timestamp: Date.now() });
         });

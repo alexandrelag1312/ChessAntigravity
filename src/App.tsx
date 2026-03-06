@@ -10,6 +10,8 @@ import GameControls from './components/GameControls';
 import CapturedPieces from './components/CapturedPieces';
 import Lobby from './components/Lobby';
 import Chat from './components/Chat';
+import PromotionOverlay from './components/PromotionOverlay';
+import ChessClock from './components/ChessClock';
 import { motion } from 'framer-motion';
 import { themes, defaultTheme, type BoardTheme } from './logic/themes';
 
@@ -83,24 +85,58 @@ export default function App() {
   useEffect(() => {
     if (appMode === 'multiplayer' && socket.remoteState) {
       gameState.loadState(socket.remoteState.fen, socket.remoteState.history);
+      // Sync clocks from full state
+      if (typeof socket.remoteState.clockWhite === 'number') setClockWhite(socket.remoteState.clockWhite);
+      if (typeof socket.remoteState.clockBlack === 'number') setClockBlack(socket.remoteState.clockBlack);
     }
   }, [socket.remoteState, appMode]);
 
-  // Apply opponent's move when received from server
-  // This is the SINGLE place where move_received is acted upon.
+  // ECHO FIX: Apply opponent's move SILENTLY (no re-emit to server)
+  // Uses applyRemoteMove which intentionally skips onMoveExecuted callback
   const seenMoveTimestamp = useRef<number>(0);
   useEffect(() => {
     if (appMode === 'multiplayer' && socket.lastReceivedMove) {
       if (socket.lastReceivedMove.timestamp === seenMoveTimestamp.current) return;
       seenMoveTimestamp.current = socket.lastReceivedMove.timestamp;
-      console.log('[App] 📥 applying opponent move from server:', socket.lastReceivedMove);
-      gameState.makeMove(
+      console.log('[App] 📥 applying opponent move (silent):', socket.lastReceivedMove);
+      gameState.applyRemoteMove(
         socket.lastReceivedMove.from,
         socket.lastReceivedMove.to,
         socket.lastReceivedMove.promotion
       );
+      // Sync clocks from move payload
+      if (typeof socket.lastReceivedMove.clockWhite === 'number') setClockWhite(socket.lastReceivedMove.clockWhite);
+      if (typeof socket.lastReceivedMove.clockBlack === 'number') setClockBlack(socket.lastReceivedMove.clockBlack);
     }
   }, [socket.lastReceivedMove, appMode]);
+
+  // ── Chess Clocks ──────────────────────────────────────────────────
+  const DEFAULT_CLOCK = 10 * 60; // 10 minutes
+  const [clockWhite, setClockWhite] = useState(DEFAULT_CLOCK);
+  const [clockBlack, setClockBlack] = useState(DEFAULT_CLOCK);
+  const clockIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Start/manage the local countdown interval when online and game has started
+  useEffect(() => {
+    if (appMode !== 'multiplayer' || !socket.isOnline) return;
+    if (gameState.isGameOver || clockWhite <= 0 || clockBlack <= 0) {
+      if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
+      return;
+    }
+    // Only tick once (at least one move played)
+    if (gameState.moveHistory.length === 0) return;
+
+    if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
+    clockIntervalRef.current = setInterval(() => {
+      if (gameState.turn === 'w') {
+        setClockWhite(prev => Math.max(0, prev - 1));
+      } else {
+        setClockBlack(prev => Math.max(0, prev - 1));
+      }
+    }, 1000);
+
+    return () => { if (clockIntervalRef.current) clearInterval(clockIntervalRef.current); };
+  }, [appMode, socket.isOnline, gameState.turn, gameState.moveHistory.length, gameState.isGameOver]);
 
   // Copy Invite Link Helper
   const handleCopyInvite = () => {
@@ -259,10 +295,44 @@ export default function App() {
                 theme={theme}
                 playerRole={appMode === 'multiplayer' ? socket.role : null}
               />
+
+              {/* Pawn Promotion Overlay */}
+              {gameState.pendingPromotion && (
+                <PromotionOverlay
+                  pending={gameState.pendingPromotion}
+                  onConfirm={gameState.confirmPromotion}
+                  onCancel={gameState.cancelPromotion}
+                />
+              )}
             </div>
 
             {/* Side Panel */}
             <div className="w-full lg:w-72 xl:w-80 flex flex-col gap-4">
+
+              {/* Chess Clocks (multiplayer only) */}
+              {appMode === 'multiplayer' && socket.isOnline && (
+                <div className="flex flex-col gap-2">
+                  <ChessClock
+                    timeSeconds={boardOrientation === 'white' ? clockBlack : clockWhite}
+                    isActive={boardOrientation === 'white' ? gameState.turn === 'b' : gameState.turn === 'w'}
+                    label={boardOrientation === 'white' ? 'Opponent' : 'You'}
+                    color={boardOrientation === 'white' ? 'b' : 'w'}
+                    playerName={boardOrientation === 'white'
+                      ? socket.remoteState?.playerBlack?.name
+                      : socket.remoteState?.playerWhite?.name}
+                  />
+                  <ChessClock
+                    timeSeconds={boardOrientation === 'white' ? clockWhite : clockBlack}
+                    isActive={boardOrientation === 'white' ? gameState.turn === 'w' : gameState.turn === 'b'}
+                    label={boardOrientation === 'white' ? 'You' : 'Opponent'}
+                    color={boardOrientation === 'white' ? 'w' : 'b'}
+                    playerName={boardOrientation === 'white'
+                      ? socket.remoteState?.playerWhite?.name
+                      : socket.remoteState?.playerBlack?.name}
+                  />
+                </div>
+              )}
+
               <GameInfo
                 gameState={gameState}
                 aiEnabled={appMode === 'local' ? aiEnabled : false}
