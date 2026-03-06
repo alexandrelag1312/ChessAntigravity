@@ -124,6 +124,8 @@ io.on('connection', (socket) => {
         socketToRoom.set(socket.id, roomId);
         socket.join(roomId);
 
+        socket.emit('assign_color', 'w');
+
         callback({
             success: true,
             roomId,
@@ -176,9 +178,11 @@ io.on('connection', (socket) => {
         if (!room.playerWhite) {
             room.playerWhite = { socketId: socket.id, name: data.playerName || 'White' };
             role = 'white';
+            socket.emit('assign_color', 'w');
         } else if (!room.playerBlack) {
             room.playerBlack = { socketId: socket.id, name: data.playerName || 'Black' };
             role = 'black';
+            socket.emit('assign_color', 'b');
         } else {
             // Room is full — join as spectator
             room.spectators.set(socket.id, data.playerName || 'Spectator');
@@ -239,11 +243,10 @@ io.on('connection', (socket) => {
                 return;
             }
 
-            // Broadcast exactly what the user requested to the OTHER player
             socket.to(roomId).emit('move_received', { from: data.from, to: data.to, promotion: data.promotion });
 
-            // Broadcast full state to everyone (including sender and spectators) to ensure true sync
-            io.to(roomId).emit('sync_state', getRoomSnapshot(room));
+            // Explicitly do NOT use io.emit, only send state to OTHERS
+            socket.to(roomId).emit('sync_state', getRoomSnapshot(room));
 
             callback?.({ success: true });
             console.log(`[move] ${roomId} ${move.san} by ${role}`);

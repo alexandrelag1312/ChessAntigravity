@@ -13,7 +13,8 @@ import { motion } from 'framer-motion';
 import { themes, defaultTheme, type BoardTheme } from './logic/themes';
 
 export default function App() {
-  const gameState = useChessGame();
+  const socket = useSocket();
+  const gameState = useChessGame(socket.socket);
 
   // URL processing for auto-join
   const initialRoomParam = new URLSearchParams(window.location.search).get('room') || '';
@@ -39,7 +40,7 @@ export default function App() {
     } catch { }
   }, [theme]);
 
-  const socket = useSocket();
+  // Save theme selection
 
   // Disable AI when entering multiplayer
   useEffect(() => {
@@ -88,20 +89,9 @@ export default function App() {
     }
   };
 
-  // Safe wrapper around makeMove that also emits to server if multiplayer
-  const handleMakeMove = useCallback((from: string, to: string, promotion?: string) => {
-    // 1. Optimistic Local Update
-    const success = gameState.makeMove(from, to, promotion);
-    // 2. Network emit
-    if (success && appMode === 'multiplayer' && socket.roomId) {
-      socket.emitMove(from, to, promotion);
-    }
-    return success;
-  }, [gameState, appMode, socket]);
-
   // Stable ref for the AI move callback
-  const makeMoveRef = useRef(handleMakeMove);
-  makeMoveRef.current = handleMakeMove;
+  const makeMoveRef = useRef(gameState.makeMove);
+  makeMoveRef.current = gameState.makeMove;
   const onBestMove = useCallback(
     (from: string, to: string, promotion?: string) => {
       makeMoveRef.current(from, to, promotion);
@@ -163,13 +153,6 @@ export default function App() {
   }, [appMode, engine]);
 
   const flipBoard = () => setBoardOrientation((prev) => (prev === 'white' ? 'black' : 'white'));
-
-  // ── Wrapped Game State ──
-  // We pass a modified gameState to ChessBoard to use our custom makeMove
-  const activeGameState = {
-    ...gameState,
-    makeMove: handleMakeMove,
-  };
 
   return (
     <div className="min-h-screen flex flex-col items-center">
@@ -246,7 +229,7 @@ export default function App() {
               )}
 
               <ChessBoard
-                gameState={activeGameState}
+                gameState={gameState}
                 boardOrientation={boardOrientation}
                 theme={theme}
                 playerRole={appMode === 'multiplayer' ? socket.role : null}
@@ -256,7 +239,7 @@ export default function App() {
             {/* Side Panel */}
             <div className="w-full lg:w-72 xl:w-80 flex flex-col gap-4">
               <GameInfo
-                gameState={activeGameState}
+                gameState={gameState}
                 aiEnabled={appMode === 'local' ? aiEnabled : false}
                 isAiThinking={engine.isThinking}
               />

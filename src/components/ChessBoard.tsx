@@ -69,18 +69,9 @@ export default function ChessBoard({ gameState, boardOrientation, theme, playerR
 
         const pieceStr = typeof piece === 'string' ? piece : (piece?.pieceType || String(piece || ''));
 
-        // Multiplayer Role Locking: Enforce that the user can only grab their own color
-        if (playerRole === 'spectator') return false;
-        if (playerRole === 'white' && pieceStr.charAt(0) !== 'w') return false;
-        if (playerRole === 'black' && pieceStr.charAt(0) !== 'b') return false;
-
-        // Guard: Prevent playing out of turn explicitly
-        if (playerRole === 'white' && gameState.turn !== 'w') return false;
-        if (playerRole === 'black' && gameState.turn !== 'b') return false;
-
         // Clear any click-to-move selection when a drag completes
         clearSelection();
-        return makeMove(sourceSquare, targetSquare);
+        return gameState.onDrop(sourceSquare, targetSquare, pieceStr);
     }
 
     // ── Click handler — unified for pieces and empty squares ────────

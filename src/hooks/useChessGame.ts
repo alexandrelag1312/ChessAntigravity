@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Chess, type Move, type Square } from 'chess.js';
+import type { Socket } from 'socket.io-client';
 
 // ─── Audio URLs ─────────────────────────────────────────────────────
 const SOUNDS = {
@@ -114,10 +115,12 @@ export interface ChessGameState {
     resetGame: () => void;
     clearSelection: () => void;
     loadState: (fen: string, history: any[]) => void;
+    onDrop: (sourceSquare: string, targetSquare: string, piece: string) => boolean;
+    playerColor: 'w' | 'b' | null;
 }
 
 // ─── Hook ───────────────────────────────────────────────────────────
-export function useChessGame(): ChessGameState {
+export function useChessGame(socket: Socket | null = null): ChessGameState {
     const gameRef = useRef<Chess>(initGame());
     const [position, setPosition] = useState<string>(gameRef.current.fen());
     const [moveHistory, setMoveHistory] = useState<Move[]>(
@@ -133,7 +136,45 @@ export function useChessGame(): ChessGameState {
     });
     const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
     const [legalMoveSquares, setLegalMoveSquares] = useState<Square[]>([]);
+    const [playerColor, setPlayerColor] = useState<'w' | 'b' | null>(null);
     const hasPlayedStartSound = useRef(false);
+
+    const syncState = useCallback(() => {
+        const game = gameRef.current;
+        setPosition(game.fen());
+        setMoveHistory([...game.history({ verbose: true })]);
+        saveGame(game);
+    }, []);
+
+    // Socket Event Listeners for explicit logic
+    useEffect(() => {
+        if (!socket) return;
+
+        socket.on('assign_color', (color: 'w' | 'b') => {
+            console.log("Ma couleur est :", color);
+            setPlayerColor(color);
+        });
+
+        socket.on('move_received', (moveData: { from: string; to: string; promotion?: string }) => {
+            const game = gameRef.current;
+            try {
+                const move = game.move({
+                    from: moveData.from,
+                    to: moveData.to,
+                    promotion: moveData.promotion || 'q'
+                });
+                if (move) {
+                    syncState();
+                    playSound('move');
+                }
+            } catch (e) { }
+        });
+
+        return () => {
+            socket.off('assign_color');
+            socket.off('move_received');
+        };
+    }, [socket, syncState]);
 
     // Play game-start sound on mount
     useEffect(() => {
@@ -142,13 +183,6 @@ export function useChessGame(): ChessGameState {
             // Small delay to let the browser "settle" before audio
             setTimeout(() => playSound('gameStart'), 300);
         }
-    }, []);
-
-    const syncState = useCallback(() => {
-        const game = gameRef.current;
-        setPosition(game.fen());
-        setMoveHistory([...game.history({ verbose: true })]);
-        saveGame(game);
     }, []);
 
     const turn = gameRef.current.turn();
@@ -175,6 +209,10 @@ export function useChessGame(): ChessGameState {
                     setLegalMoveSquares([]);
                     syncState();
 
+                    if (socket) {
+                        socket.emit('move_made', { from: move.from, to: move.to, promotion: move.promotion });
+                    }
+
                     // Audio: pick the right sound based on what happened
                     if (game.isCheckmate() || game.isDraw() || game.isStalemate()) {
                         playSound('gameEnd');
@@ -192,7 +230,7 @@ export function useChessGame(): ChessGameState {
                 return false;
             }
         },
-        [syncState]
+        [syncState, socket]
     );
 
     // ── Click-to-move handler ─────────────────────────────────────────
@@ -245,8 +283,20 @@ export function useChessGame(): ChessGameState {
                 }
             }
         },
-        [selectedSquare, legalMoveSquares, isGameOver, makeMove]
+        [selectedSquare, legalMoveSquares, isGameOver, makeMove, playerColor]
     );
+
+    // ── Drop handler with locked roles ────────────────────────────────
+    const onDrop = useCallback((sourceSquare: string, targetSquare: string, piece: string) => {
+        const game = gameRef.current;
+
+        // CRITICAL PROTECTION
+        if (playerColor && (game.turn() !== playerColor || piece.charAt(0) !== playerColor)) {
+            return false;
+        }
+
+        return makeMove(sourceSquare, targetSquare);
+    }, [makeMove, playerColor]);
 
     // ── Clear selection (called when drag starts, etc.) ───────────────
     const clearSelection = useCallback(() => {
@@ -310,5 +360,7 @@ export function useChessGame(): ChessGameState {
         resetGame,
         clearSelection,
         loadState,
+        onDrop,
+        playerColor,
     };
 }
