@@ -14,7 +14,12 @@ import { themes, defaultTheme, type BoardTheme } from './logic/themes';
 
 export default function App() {
   const socket = useSocket();
-  const gameState = useChessGame(socket.socket);
+
+  // Inject network identity into the game hook
+  const gameState = useChessGame({
+    playerColor: socket.playerColor,
+    isOnline: socket.isOnline,
+  });
 
   // URL processing for auto-join
   const initialRoomParam = new URLSearchParams(window.location.search).get('room') || '';
@@ -49,12 +54,12 @@ export default function App() {
     }
   }, [appMode]);
 
-  // Force online mode when color is received
+  // Force online mode when color is received (from socket)
   useEffect(() => {
-    if (gameState.playerColor) {
+    if (socket.isOnline) {
       setAppMode('multiplayer');
     }
-  }, [gameState.playerColor]);
+  }, [socket.isOnline]);
 
   // Sync board orientation with multiplayer role
   useEffect(() => {
@@ -65,24 +70,40 @@ export default function App() {
     }
   }, [socket.role, appMode]);
 
-  // Sync remote state to local state (full payload)
+  // Sync remote state to local state (full payload from server)
   useEffect(() => {
     if (appMode === 'multiplayer' && socket.remoteState) {
       gameState.loadState(socket.remoteState.fen, socket.remoteState.history);
     }
   }, [socket.remoteState, appMode]);
 
-  // Sync explicitly received piece-by-piece moves
-  const stableMakeMove = gameState.makeMove;
+  // Apply opponent's move when received from server
+  // This is the SINGLE place where move_received is acted upon.
+  // useSocket sets lastReceivedMove, we apply it here once.
+  const seenMoveTimestamp = useRef<number>(0);
   useEffect(() => {
     if (appMode === 'multiplayer' && socket.lastReceivedMove) {
-      stableMakeMove(
+      // Guard: skip if we already applied this exact move
+      if (socket.lastReceivedMove.timestamp === seenMoveTimestamp.current) return;
+      seenMoveTimestamp.current = socket.lastReceivedMove.timestamp;
+      console.log('[App] applying opponent move from server:', socket.lastReceivedMove);
+      gameState.makeMove(
         socket.lastReceivedMove.from,
         socket.lastReceivedMove.to,
         socket.lastReceivedMove.promotion
       );
     }
-  }, [socket.lastReceivedMove, appMode, stableMakeMove]);
+  }, [socket.lastReceivedMove, appMode]);
+
+  // Emit own move to server after local execution
+  // We wrap makeMove to add the network call
+  const makeMoveAndEmit = useCallback((from: string, to: string, promotion?: string) => {
+    const success = gameState.makeMove(from, to, promotion);
+    if (success && appMode === 'multiplayer' && socket.roomId) {
+      socket.emitMove(from, to, promotion);
+    }
+    return success;
+  }, [gameState, appMode, socket]);
 
   // Copy Invite Link Helper
   const handleCopyInvite = () => {
@@ -161,6 +182,9 @@ export default function App() {
 
   const flipBoard = () => setBoardOrientation((prev) => (prev === 'white' ? 'black' : 'white'));
 
+  // Compose game state for ChessBoard with the network-aware makeMove
+  const activeGameState = { ...gameState, makeMove: makeMoveAndEmit };
+
   return (
     <div className="min-h-screen flex flex-col items-center">
       {/* Header */}
@@ -236,7 +260,7 @@ export default function App() {
               )}
 
               <ChessBoard
-                gameState={gameState}
+                gameState={activeGameState}
                 boardOrientation={boardOrientation}
                 theme={theme}
                 playerRole={appMode === 'multiplayer' ? socket.role : null}
@@ -246,7 +270,7 @@ export default function App() {
             {/* Side Panel */}
             <div className="w-full lg:w-72 xl:w-80 flex flex-col gap-4">
               <GameInfo
-                gameState={gameState}
+                gameState={activeGameState}
                 aiEnabled={appMode === 'local' ? aiEnabled : false}
                 isAiThinking={engine.isThinking}
               />

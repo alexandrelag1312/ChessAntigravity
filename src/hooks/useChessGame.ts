@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Chess, type Move, type Square } from 'chess.js';
-import type { Socket } from 'socket.io-client';
 
 // ─── Audio URLs ─────────────────────────────────────────────────────
 const SOUNDS = {
@@ -15,7 +14,6 @@ const audioCache: Record<string, HTMLAudioElement> = {};
 
 function playSound(key: keyof typeof SOUNDS) {
     try {
-        // Reuse cached Audio objects, reset before play
         if (!audioCache[key]) {
             audioCache[key] = new Audio(SOUNDS[key]);
         }
@@ -84,7 +82,6 @@ function initGame(): Chess {
             g.loadPgn(saved.pgn);
             return g;
         } catch {
-            // If PGN is corrupt, try FEN
             try {
                 return new Chess(saved.fen);
             } catch {
@@ -93,6 +90,12 @@ function initGame(): Chess {
         }
     }
     return new Chess();
+}
+
+// ─── Props: Network Identity injected from App ───────────────────────
+export interface ChessGameOptions {
+    playerColor?: 'w' | 'b' | null;
+    isOnline?: boolean;
 }
 
 // ─── Exported Interface ─────────────────────────────────────────────
@@ -120,8 +123,10 @@ export interface ChessGameState {
     isOnline: boolean;
 }
 
-// ─── Hook ───────────────────────────────────────────────────────────
-export function useChessGame(socket: Socket | null = null): ChessGameState {
+// ─── Hook — Pure Game Logic (no socket knowledge) ───────────────────
+export function useChessGame(options: ChessGameOptions = {}): ChessGameState {
+    const { playerColor = null, isOnline = false } = options;
+
     const gameRef = useRef<Chess>(initGame());
     const [position, setPosition] = useState<string>(gameRef.current.fen());
     const [moveHistory, setMoveHistory] = useState<Move[]>(
@@ -137,8 +142,6 @@ export function useChessGame(socket: Socket | null = null): ChessGameState {
     });
     const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
     const [legalMoveSquares, setLegalMoveSquares] = useState<Square[]>([]);
-    const [playerColor, setPlayerColor] = useState<'w' | 'b' | null>(null);
-    const [isOnline, setIsOnline] = useState(false);
     const hasPlayedStartSound = useRef(false);
 
     const syncState = useCallback(() => {
@@ -148,49 +151,10 @@ export function useChessGame(socket: Socket | null = null): ChessGameState {
         saveGame(game);
     }, []);
 
-    // Socket Event Listeners for explicit logic
-    useEffect(() => {
-        if (!socket) return;
-
-        socket.on('assign_color', (color: 'w' | 'b') => {
-            console.log("Ma couleur est (assign_color) :", color);
-            setPlayerColor(color);
-            setIsOnline(true);
-        });
-
-        socket.on('player_assigned', (data: { color: 'w' | 'b', roomId: string }) => {
-            console.log("!!! SYNC RÉUSSIE : JE SUIS " + data.color);
-            setPlayerColor(data.color);
-            setIsOnline(true);
-        });
-
-        socket.on('move_received', (moveData: { from: string; to: string; promotion?: string }) => {
-            const game = gameRef.current;
-            try {
-                const move = game.move({
-                    from: moveData.from,
-                    to: moveData.to,
-                    promotion: moveData.promotion || 'q'
-                });
-                if (move) {
-                    syncState();
-                    playSound('move');
-                }
-            } catch (e) { }
-        });
-
-        return () => {
-            socket.off('assign_color');
-            socket.off('player_assigned');
-            socket.off('move_received');
-        };
-    }, [socket, syncState]);
-
     // Play game-start sound on mount
     useEffect(() => {
         if (!hasPlayedStartSound.current) {
             hasPlayedStartSound.current = true;
-            // Small delay to let the browser "settle" before audio
             setTimeout(() => playSound('gameStart'), 300);
         }
     }, []);
@@ -204,6 +168,8 @@ export function useChessGame(socket: Socket | null = null): ChessGameState {
     const kingSquare = isCheck ? findKingSquare(gameRef.current, turn) : null;
 
     // ── Core move executor ────────────────────────────────────────────
+    // NOTE: Does NOT emit to socket. App.tsx is responsible for calling
+    // socket.emitMove() *after* calling this, to avoid double-emit.
     const makeMove = useCallback(
         (from: string, to: string, promotion?: string): boolean => {
             const game = gameRef.current;
@@ -219,11 +185,7 @@ export function useChessGame(socket: Socket | null = null): ChessGameState {
                     setLegalMoveSquares([]);
                     syncState();
 
-                    if (socket) {
-                        socket.emit('move_made', { from: move.from, to: move.to, promotion: move.promotion });
-                    }
-
-                    // Audio: pick the right sound based on what happened
+                    // Audio
                     if (game.isCheckmate() || game.isDraw() || game.isStalemate()) {
                         playSound('gameEnd');
                     } else if (game.isCheck()) {
@@ -240,13 +202,10 @@ export function useChessGame(socket: Socket | null = null): ChessGameState {
                 return false;
             }
         },
-        [syncState, socket]
+        [syncState]
     );
 
     // ── Click-to-move handler ─────────────────────────────────────────
-    // This is the single unified handler for square clicks.
-    // It handles: select piece → show legal moves → click destination → execute.
-    // It also handles: click another own piece → switch selection.
     const handleSquareClick = useCallback(
         (square: string, piece: string | null) => {
             if (isGameOver) return;
@@ -255,8 +214,24 @@ export function useChessGame(socket: Socket | null = null): ChessGameState {
             const game = gameRef.current;
             const currentTurn = game.turn();
 
-            // Determine if the piece on this square belongs to the current player
-            // piece format from react-chessboard v5: pieceType like "wP", "bK", etc.
+            // ── ROLE LOCK: Block clicks for wrong color in online mode ──
+            if (isOnline && playerColor) {
+                // If clicking on a piece, must be our own
+                if (piece && piece[0] !== playerColor) {
+                    // Only block if no square is selected (selecting opponent piece from scratch)
+                    if (!selectedSquare) return;
+                }
+                // Block if it's not our turn
+                if (currentTurn !== playerColor) {
+                    // Allow deselecting, but not moving
+                    if (!selectedSquare || !legalMoveSquares.includes(sq)) {
+                        setSelectedSquare(null);
+                        setLegalMoveSquares([]);
+                        return;
+                    }
+                }
+            }
+
             const isOwnPiece =
                 piece != null &&
                 piece.length >= 1 &&
@@ -293,25 +268,29 @@ export function useChessGame(socket: Socket | null = null): ChessGameState {
                 }
             }
         },
-        [selectedSquare, legalMoveSquares, isGameOver, makeMove, playerColor]
+        [selectedSquare, legalMoveSquares, isGameOver, makeMove, playerColor, isOnline]
     );
 
-    // ── Drop handler with locked roles ────────────────────────────────
+    // ── Drop handler with strict role lock ────────────────────────────
     const onDrop = useCallback((sourceSquare: string, targetSquare: string, piece: string) => {
         const game = gameRef.current;
 
-        // CRITICAL PROTECTION
-        if (isOnline && playerColor && game.turn() !== playerColor) {
-            return false;
-        }
-        if (isOnline && playerColor && piece.charAt(0) !== playerColor) {
-            return false;
+        // CRITICAL ROLE LOCK — only applies in online mode
+        if (isOnline && playerColor) {
+            if (game.turn() !== playerColor) {
+                console.log(`[onDrop] BLOCKED: not your turn (turn=${game.turn()}, you=${playerColor})`);
+                return false;
+            }
+            if (piece.charAt(0) !== playerColor) {
+                console.log(`[onDrop] BLOCKED: not your piece (piece=${piece}, you=${playerColor})`);
+                return false;
+            }
         }
 
         return makeMove(sourceSquare, targetSquare);
     }, [makeMove, playerColor, isOnline]);
 
-    // ── Clear selection (called when drag starts, etc.) ───────────────
+    // ── Clear selection ───────────────────────────────────────────────
     const clearSelection = useCallback(() => {
         setSelectedSquare(null);
         setLegalMoveSquares([]);
@@ -342,7 +321,7 @@ export function useChessGame(socket: Socket | null = null): ChessGameState {
 
     const loadState = useCallback((fen: string, history: Move[]) => {
         try {
-            if (fen !== position) {
+            if (fen !== gameRef.current.fen()) {
                 gameRef.current = new Chess(fen);
                 setPosition(gameRef.current.fen());
                 setMoveHistory([...history]);
@@ -352,7 +331,7 @@ export function useChessGame(socket: Socket | null = null): ChessGameState {
                 setLegalMoveSquares([]);
             }
         } catch { }
-    }, [position]);
+    }, []);
 
     return {
         position,

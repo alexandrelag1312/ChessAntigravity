@@ -157,6 +157,9 @@ io.on('connection', (socket) => {
                 room.playerWhite.disconnectedAt = undefined;
                 socketToRoom.set(socket.id, roomId);
                 socket.join(roomId);
+                // Re-send color assignment so frontend state is restored
+                io.to(socket.id).emit('assign_color', 'w');
+                io.to(socket.id).emit('player_assigned', { color: 'w', roomId });
                 io.to(roomId).emit('player_reconnected', { role: 'white', name: room.playerWhite.name });
                 callback({ success: true, roomId, role: 'white', state: getRoomSnapshot(room) });
                 console.log(`[reconnect] ${socket.id} as White in ${roomId}`);
@@ -168,6 +171,9 @@ io.on('connection', (socket) => {
                 room.playerBlack.disconnectedAt = undefined;
                 socketToRoom.set(socket.id, roomId);
                 socket.join(roomId);
+                // Re-send color assignment so frontend state is restored
+                io.to(socket.id).emit('assign_color', 'b');
+                io.to(socket.id).emit('player_assigned', { color: 'b', roomId });
                 io.to(roomId).emit('player_reconnected', { role: 'black', name: room.playerBlack.name });
                 callback({ success: true, roomId, role: 'black', state: getRoomSnapshot(room) });
                 console.log(`[reconnect] ${socket.id} as Black in ${roomId}`);
