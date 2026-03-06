@@ -96,6 +96,8 @@ function initGame(): Chess {
 export interface ChessGameOptions {
     playerColor?: 'w' | 'b' | null;
     isOnline?: boolean;
+    /** Called after every successful local move — use to emit to socket */
+    onMoveExecuted?: (from: string, to: string, promotion?: string) => void;
 }
 
 // ─── Exported Interface ─────────────────────────────────────────────
@@ -125,7 +127,12 @@ export interface ChessGameState {
 
 // ─── Hook — Pure Game Logic (no socket knowledge) ───────────────────
 export function useChessGame(options: ChessGameOptions = {}): ChessGameState {
-    const { playerColor = null, isOnline = false } = options;
+    const { playerColor = null, isOnline = false, onMoveExecuted } = options;
+
+    // Keep a stable ref to onMoveExecuted so makeMove's useCallback
+    // never needs to re-run when the callback identity changes
+    const onMoveExecutedRef = useRef(onMoveExecuted);
+    useEffect(() => { onMoveExecutedRef.current = onMoveExecuted; }, [onMoveExecuted]);
 
     const gameRef = useRef<Chess>(initGame());
     const [position, setPosition] = useState<string>(gameRef.current.fen());
@@ -185,6 +192,11 @@ export function useChessGame(options: ChessGameOptions = {}): ChessGameState {
                     setLegalMoveSquares([]);
                     syncState();
 
+                    // Notify App.tsx via callback so it can emit to socket
+                    // (avoids the closure trap — onDrop calls makeMove which calls this)
+                    if (onMoveExecutedRef.current) {
+                        onMoveExecutedRef.current(move.from, move.to, move.promotion);
+                    }
                     // Audio
                     if (game.isCheckmate() || game.isDraw() || game.isStalemate()) {
                         playSound('gameEnd');
