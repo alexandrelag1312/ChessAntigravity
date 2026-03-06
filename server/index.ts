@@ -92,10 +92,9 @@ const io = new Server(httpServer, {
         origin: process.env.FRONTEND_URL || '*',
         methods: ['GET', 'POST'],
     },
-    connectionStateRecovery: {
-        maxDisconnectionDuration: 60_000, // 60 seconds
-        skipMiddlewares: true,
-    },
+    // NOTE: connectionStateRecovery is disabled.
+    // Railway does not guarantee sticky sessions, so recovery packets
+    // can land on a different node and cause an endless reconnect storm.
 });
 
 // ─── Health endpoint ────────────────────────────────────────────────
@@ -258,13 +257,14 @@ io.on('connection', (socket) => {
                 return;
             }
 
+            console.log(`[move_made] Relaying move to room: ${roomId} | ${move.san} by ${role}`);
             socket.to(roomId).emit('move_received', { from: data.from, to: data.to, promotion: data.promotion });
 
-            // Explicitly do NOT use io.emit, only send state to OTHERS
+            // Send updated board state to all OTHER players (not sender)
             socket.to(roomId).emit('sync_state', getRoomSnapshot(room));
 
             callback?.({ success: true });
-            console.log(`[move] ${roomId} ${move.san} by ${role}`);
+            console.log(`[move_made] ✅ ${roomId} ${move.san} by ${role} → relayed`);
         } catch {
             callback?.({ success: false, error: 'Invalid move' });
         }

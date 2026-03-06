@@ -50,43 +50,52 @@ export function useSocket() {
     // Initialize socket connection
     useEffect(() => {
         const newSocket = io(import.meta.env.VITE_BACKEND_URL || '/', {
-            reconnectionDelayMax: 10000,
+            reconnection: true,
+            reconnectionAttempts: 10,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            // Do NOT set autoConnect: false — we want it to connect immediately
         });
 
         socketRef.current = newSocket;
         setSocket(newSocket);
         setStatus('connecting');
 
+        // Track if we've already done the initial auto-reconnect
+        let hasAttemptedReconnect = false;
+
         newSocket.on('connect', () => {
             setStatus('connected');
             setError(null);
             console.log(`[socket] connected: ${newSocket.id}`);
 
-            // Handle auto-reconnect if we have stored credentials
-            const savedRoom = localStorage.getItem('chess_room_id');
-            const savedSocketId = localStorage.getItem('chess_socket_id');
-            const savedName = localStorage.getItem('chess_player_name') || 'Player';
+            // Auto-reconnect: only attempt ONCE per mount, not on every reconnect
+            if (!hasAttemptedReconnect) {
+                hasAttemptedReconnect = true;
+                const savedRoom = localStorage.getItem('chess_room_id');
+                const savedSocketId = localStorage.getItem('chess_socket_id');
+                const savedName = localStorage.getItem('chess_player_name') || 'Player';
 
-            if (savedRoom && savedSocketId) {
-                console.log(`[socket] attempting auto-reconnect to ${savedRoom}`);
-                newSocket.emit('join_room', {
-                    roomId: savedRoom,
-                    playerName: savedName,
-                    previousSocketId: savedSocketId
-                }, (res: any) => {
-                    if (res.success) {
-                        setRoomId(res.roomId);
-                        setRole(res.role);
-                        setRemoteState(res.state);
-                        localStorage.setItem('chess_socket_id', newSocket.id!);
-                        // Reassign color based on reconnected role
-                        if (res.role === 'white') handleColorAssigned('w');
-                        if (res.role === 'black') handleColorAssigned('b');
-                    } else {
-                        localStorage.removeItem('chess_room_id');
-                        localStorage.removeItem('chess_socket_id');
-                    }
-                });
+                if (savedRoom && savedSocketId) {
+                    console.log(`[socket] attempting auto-reconnect to ${savedRoom}`);
+                    newSocket.emit('join_room', {
+                        roomId: savedRoom,
+                        playerName: savedName,
+                        previousSocketId: savedSocketId
+                    }, (res: any) => {
+                        if (res.success) {
+                            setRoomId(res.roomId);
+                            setRole(res.role);
+                            setRemoteState(res.state);
+                            localStorage.setItem('chess_socket_id', newSocket.id!);
+                            if (res.role === 'white') handleColorAssigned('w');
+                            if (res.role === 'black') handleColorAssigned('b');
+                        } else {
+                            localStorage.removeItem('chess_room_id');
+                            localStorage.removeItem('chess_socket_id');
+                        }
+                    });
+                }
             }
         });
 
