@@ -138,29 +138,6 @@ export default function App() {
     return () => { if (clockIntervalRef.current) clearInterval(clockIntervalRef.current); };
   }, [appMode, socket.isOnline, gameState.turn, gameState.moveHistory.length, gameState.isGameOver]);
 
-  // ── Audio Alerts ──────────────────────────────────────────────────
-  // Turn ding: play when it becomes YOUR turn (opponent move received)
-  const lastReceivedTs = useRef<number>(0);
-  useEffect(() => {
-    if (!socket.lastReceivedMove || appMode !== 'multiplayer') return;
-    if (socket.lastReceivedMove.timestamp === lastReceivedTs.current) return;
-    lastReceivedTs.current = socket.lastReceivedMove.timestamp;
-    // Play a gentle ding to alert the current player it's their turn
-    try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.frequency.value = 880;
-      osc.type = 'sine';
-      gain.gain.setValueAtTime(0, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.5);
-    } catch { }
-  }, [socket.lastReceivedMove, appMode]);
-
   // Time pressure bip: play every 5s when your clock < 30s
   const lastBipTime = useRef<number>(0);
   useEffect(() => {
