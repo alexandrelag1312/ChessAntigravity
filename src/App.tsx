@@ -316,11 +316,12 @@ export default function App() {
             {appMode === 'multiplayer' && socket.isOnline && (
               <div className="flex items-center gap-2 px-1 lg:hidden">
                 <div className="w-4 h-4 rounded-full border-2 border-border shrink-0"
-                  style={{ backgroundColor: boardOrientation === 'white' ? '#1a1a1a' : '#f5f5f5' }} />
+                  style={{ backgroundColor: socket.playerColor === 'w' ? '#1a1a1a' : '#f5f5f5' }} />
                 <span className="text-sm font-semibold text-text-primary truncate flex-1">
-                  {boardOrientation === 'white'
-                    ? (socket.remoteState?.playerBlack?.name ?? 'Opponent')
-                    : (socket.remoteState?.playerWhite?.name ?? 'Opponent')}
+                  <span className="text-xs font-medium text-text-muted uppercase tracking-wider shrink-0">Opponent</span>
+                  {socket.playerColor === 'w'
+                    ? (socket.remoteState?.playerBlack?.name ?? '—')
+                    : (socket.remoteState?.playerWhite?.name ?? '—')}
                 </span>
                 <span className={`font-mono text-lg font-bold tabular-nums ${(boardOrientation === 'white' ? clockBlack : clockWhite) <= 30 ? 'text-red-400'
                   : (boardOrientation === 'white' ? gameState.turn === 'b' : gameState.turn === 'w') ? 'text-accent'
@@ -389,10 +390,11 @@ export default function App() {
             {/* ══ MOBILE-ONLY: player row (below board) ══ */}
             <div className="flex items-center gap-2 px-1 lg:hidden">
               <div className="w-4 h-4 rounded-full border-2 border-border shrink-0"
-                style={{ backgroundColor: boardOrientation === 'white' ? '#f5f5f5' : '#1a1a1a' }} />
+                style={{ backgroundColor: socket.playerColor === 'w' ? '#f5f5f5' : '#1a1a1a' }} />
               <span className="text-sm font-semibold text-text-primary truncate flex-1">
+                <span className="text-xs font-medium text-text-muted uppercase tracking-wider shrink-0">You</span>
                 {appMode === 'multiplayer'
-                  ? (boardOrientation === 'white' ? (socket.remoteState?.playerWhite?.name ?? 'You') : (socket.remoteState?.playerBlack?.name ?? 'You'))
+                  ? (socket.playerColor === 'w' ? (socket.remoteState?.playerWhite?.name ?? 'You') : (socket.remoteState?.playerBlack?.name ?? 'You'))
                   : 'You'}
               </span>
               <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${(boardOrientation === 'white' ? gameState.turn === 'w' : gameState.turn === 'b')
