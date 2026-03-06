@@ -138,6 +138,52 @@ export default function App() {
     return () => { if (clockIntervalRef.current) clearInterval(clockIntervalRef.current); };
   }, [appMode, socket.isOnline, gameState.turn, gameState.moveHistory.length, gameState.isGameOver]);
 
+  // ── Audio Alerts ──────────────────────────────────────────────────
+  // Turn ding: play when it becomes YOUR turn (opponent move received)
+  const lastReceivedTs = useRef<number>(0);
+  useEffect(() => {
+    if (!socket.lastReceivedMove || appMode !== 'multiplayer') return;
+    if (socket.lastReceivedMove.timestamp === lastReceivedTs.current) return;
+    lastReceivedTs.current = socket.lastReceivedMove.timestamp;
+    // Play a gentle ding to alert the current player it's their turn
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.5);
+    } catch { }
+  }, [socket.lastReceivedMove, appMode]);
+
+  // Time pressure bip: play every 5s when your clock < 30s
+  const lastBipTime = useRef<number>(0);
+  useEffect(() => {
+    if (appMode !== 'multiplayer' || !socket.isOnline || !socket.playerColor) return;
+    const myTime = socket.playerColor === 'w' ? clockWhite : clockBlack;
+    if (myTime <= 0 || myTime > 30) return;
+    const now = Date.now();
+    if (now - lastBipTime.current < 5000) return;
+    lastBipTime.current = now;
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = 440;
+      osc.type = 'square';
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.15);
+    } catch { }
+  }, [clockWhite, clockBlack, socket.playerColor, appMode, socket.isOnline]);
+
   // Copy Invite Link Helper
   const handleCopyInvite = () => {
     if (!socket.roomId) return;
@@ -405,7 +451,7 @@ export default function App() {
 
       {/* Multiplayer Chat Engine */}
       {appMode === 'multiplayer' && socket.roomId && (
-        <Chat messages={socket.remoteState?.chatHistory || []} onSendMessage={socket.sendChat} />
+        <Chat messages={socket.chatMessages} onSendMessage={socket.sendChat} />
       )}
     </div>
   );

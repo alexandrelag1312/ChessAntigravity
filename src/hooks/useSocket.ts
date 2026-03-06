@@ -48,6 +48,7 @@ export function useSocket() {
     // ── THE SINGLE SOURCE OF TRUTH for player identity ──────────────
     const [playerColor, setPlayerColor] = useState<'w' | 'b' | null>(null);
     const [isOnline, setIsOnline] = useState(false);
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
     const socketRef = useRef<Socket | null>(null);
 
@@ -137,6 +138,12 @@ export function useSocket() {
             setLastReceivedMove({ ...move, timestamp: Date.now() });
         });
 
+        // ── Chat — Dedicated real-time listener ───────────────────────
+        // (Do NOT rely on sync_state for chat — it is too slow and batched)
+        newSocket.on('chat_message', (msg: ChatMessage) => {
+            setChatMessages(prev => [...prev, msg]);
+        });
+
         // ── Room Events ───────────────────────────────────────────────
         newSocket.on('sync_state', (state: RemoteGameState) => {
             setRemoteState(state);
@@ -206,6 +213,7 @@ export function useSocket() {
         setRemoteState(null);
         setPlayerColor(null);
         setIsOnline(false);
+        setChatMessages([]);
         localStorage.removeItem('chess_room_id');
         localStorage.removeItem('chess_socket_id');
         if (socketRef.current) {
@@ -238,6 +246,7 @@ export function useSocket() {
         remoteState,
         playerColor,
         isOnline,
+        chatMessages,
         createRoom,
         joinRoom,
         leaveRoom,

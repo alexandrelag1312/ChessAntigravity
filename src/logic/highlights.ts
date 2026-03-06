@@ -12,10 +12,10 @@ export function getLastMoveStyles(
 
     return {
         [lastMove.from]: {
-            boxShadow: 'inset 0 0 0 9999px rgba(16, 185, 129, 0.35)',
+            boxShadow: 'inset 0 0 0 9999px rgba(251, 191, 36, 0.28)',
         },
         [lastMove.to]: {
-            boxShadow: 'inset 0 0 0 9999px rgba(16, 185, 129, 0.45)',
+            boxShadow: 'inset 0 0 0 9999px rgba(251, 191, 36, 0.45)',
         },
     };
 }
