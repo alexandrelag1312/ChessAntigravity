@@ -10,7 +10,6 @@ export interface BoardTheme {
 }
 
 export const themes: BoardTheme[] = [
-    { id: 'classic', name: 'Classic', lightSquare: '#EBECD0', darkSquare: '#739552' }, // Chess.com style
     {
         id: 'wood',
         name: 'Wood',
@@ -19,6 +18,7 @@ export const themes: BoardTheme[] = [
         styleLight: { backgroundImage: 'url(/oak.jpg)', backgroundSize: 'cover' },
         styleDark: { backgroundImage: 'url(/walnut.jpg)', backgroundSize: 'cover' }
     },
+    { id: 'classic', name: 'Classic', lightSquare: '#EBECD0', darkSquare: '#739552' },
     { id: 'red', name: 'Red', lightSquare: '#F2DFCA', darkSquare: '#B33D3D' },
     { id: 'purple', name: 'Purple', lightSquare: '#E1D5ED', darkSquare: '#8666A6' },
 ];

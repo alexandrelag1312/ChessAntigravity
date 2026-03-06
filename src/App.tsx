@@ -289,12 +289,29 @@ export default function App() {
           </div>
         ) : (
           // Game View (Local or Connected Multiplayer)
-          <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 w-full max-w-5xl items-center lg:items-start relative">
+          <div className="grid grid-cols-1 lg:grid-cols-[280px_auto_280px] gap-6 lg:gap-8 w-full max-w-[1200px] items-start">
 
-            {/* Board */}
-            <div className="shrink-0 relative">
+            {/* ── LEFT COLUMN: Actions & Controls ─────────────────── */}
+            <div className="flex flex-col gap-4 order-2 lg:order-1">
+              <GameControls
+                onNewGame={handleNewGame}
+                onUndo={handleUndo}
+                onFlipBoard={flipBoard}
+                canUndo={appMode === 'local' ? gameState.moveHistory.length > 0 : false}
+                aiEnabled={appMode === 'local' ? aiEnabled : false}
+                onToggleAi={handleToggleAi}
+                aiLevel={aiLevel}
+                onAiLevelChange={setAiLevel}
+                theme={theme}
+                onThemeChange={setTheme}
+              />
+            </div>
+
+            {/* ── CENTER COLUMN: Chess Board ───────────────────────── */}
+            <div className="shrink-0 relative flex flex-col items-center order-1 lg:order-2">
+              {/* Multiplayer room bar */}
               {appMode === 'multiplayer' && socket.remoteState && (
-                <div className="absolute -top-10 left-0 right-0 flex justify-between items-center px-1">
+                <div className="w-full flex justify-between items-center px-1 mb-3">
                   <div className="px-3 py-1 rounded-full bg-accent text-white text-xs font-bold shadow-md">
                     Room: <span className="font-mono tracking-widest">{socket.roomId}</span>
                   </div>
@@ -304,9 +321,10 @@ export default function App() {
                 </div>
               )}
 
+              {/* Spectator badge */}
               {appMode === 'multiplayer' && socket.role === 'spectator' && (
-                <div className="absolute z-10 top-2 mt-4 right-2 pointer-events-none">
-                  <span className="bg-surface/90 text-text-primary px-3 py-1.5 rounded-full text-xs font-bold shadow-lg border border-border backdrop-blur-sm shadow-emerald-500/10">
+                <div className="absolute z-10 top-12 right-2 pointer-events-none">
+                  <span className="bg-surface/90 text-text-primary px-3 py-1.5 rounded-full text-xs font-bold shadow-lg border border-border backdrop-blur-sm">
                     👀 Spectating
                   </span>
                 </div>
@@ -329,8 +347,8 @@ export default function App() {
               )}
             </div>
 
-            {/* Side Panel */}
-            <div className="w-full lg:w-72 xl:w-80 flex flex-col gap-4">
+            {/* ── RIGHT COLUMN: Game Info ──────────────────────────── */}
+            <div className="flex flex-col gap-4 order-3">
 
               {/* Chess Clocks (multiplayer only) */}
               {appMode === 'multiplayer' && socket.isOnline && (
@@ -362,7 +380,7 @@ export default function App() {
                 isAiThinking={engine.isThinking}
               />
 
-              {/* Multiplayer Status (if active) */}
+              {/* Multiplayer Player Status */}
               {appMode === 'multiplayer' && socket.remoteState && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -409,20 +427,10 @@ export default function App() {
               </motion.div>
 
               <MoveHistory moves={gameState.moveHistory} />
-              <GameControls
-                onNewGame={handleNewGame}
-                onUndo={handleUndo}
-                onFlipBoard={flipBoard}
-                canUndo={appMode === 'local' ? gameState.moveHistory.length > 0 : false} // Undo currently local only
-                aiEnabled={appMode === 'local' ? aiEnabled : false}
-                onToggleAi={handleToggleAi}
-                aiLevel={aiLevel}
-                onAiLevelChange={setAiLevel}
-                theme={theme}
-                onThemeChange={setTheme}
-              />
             </div>
+
           </div>
+
         )}
       </main>
 
