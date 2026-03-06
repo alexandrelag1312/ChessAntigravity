@@ -125,6 +125,8 @@ io.on('connection', (socket) => {
         socket.join(roomId);
 
         io.to(socket.id).emit('assign_color', 'w');
+        io.to(socket.id).emit('player_assigned', { color: 'w', roomId: roomId });
+        console.log(`Joueur ${socket.id} assigné à w dans ${roomId}`);
 
         callback({
             success: true,
@@ -195,6 +197,8 @@ io.on('connection', (socket) => {
 
         if (assignedColor) {
             io.to(socket.id).emit('assign_color', assignedColor);
+            io.to(socket.id).emit('player_assigned', { color: assignedColor, roomId: roomId });
+            console.log(`Joueur ${socket.id} assigné à ${assignedColor} dans ${roomId}`);
         }
 
         // Notify everyone

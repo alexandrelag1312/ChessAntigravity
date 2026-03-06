@@ -153,8 +153,14 @@ export function useChessGame(socket: Socket | null = null): ChessGameState {
         if (!socket) return;
 
         socket.on('assign_color', (color: 'w' | 'b') => {
-            console.log("Ma couleur est :", color);
+            console.log("Ma couleur est (assign_color) :", color);
             setPlayerColor(color);
+            setIsOnline(true);
+        });
+
+        socket.on('player_assigned', (data: { color: 'w' | 'b', roomId: string }) => {
+            console.log("!!! SYNC RÉUSSIE : JE SUIS " + data.color);
+            setPlayerColor(data.color);
             setIsOnline(true);
         });
 
@@ -175,6 +181,7 @@ export function useChessGame(socket: Socket | null = null): ChessGameState {
 
         return () => {
             socket.off('assign_color');
+            socket.off('player_assigned');
             socket.off('move_received');
         };
     }, [socket, syncState]);
@@ -294,12 +301,15 @@ export function useChessGame(socket: Socket | null = null): ChessGameState {
         const game = gameRef.current;
 
         // CRITICAL PROTECTION
-        if (playerColor && (game.turn() !== playerColor || piece.charAt(0) !== playerColor)) {
+        if (isOnline && playerColor && game.turn() !== playerColor) {
+            return false;
+        }
+        if (isOnline && playerColor && piece.charAt(0) !== playerColor) {
             return false;
         }
 
         return makeMove(sourceSquare, targetSquare);
-    }, [makeMove, playerColor]);
+    }, [makeMove, playerColor, isOnline]);
 
     // ── Clear selection (called when drag starts, etc.) ───────────────
     const clearSelection = useCallback(() => {
