@@ -61,6 +61,7 @@ export function useSocket() {
 
             if (savedRoom && savedSocketId && !roomId) {
                 console.log(`[socket] attempting auto-reconnect to ${savedRoom}`);
+                console.log("Tentative de rejoindre la salle:", savedRoom);
                 newSocket.emit('join_room', {
                     roomId: savedRoom,
                     playerName: savedName,
@@ -139,6 +140,7 @@ export function useSocket() {
     const joinRoom = useCallback((id: string, playerName: string) => {
         if (!socketRef.current) return;
         setError(null);
+        console.log("Tentative de rejoindre la salle:", id);
         socketRef.current.emit('join_room', { roomId: id, playerName }, (res: any) => {
             if (res.success) {
                 setRoomId(res.roomId);

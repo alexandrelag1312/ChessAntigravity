@@ -49,6 +49,13 @@ export default function App() {
     }
   }, [appMode]);
 
+  // Force online mode when color is received
+  useEffect(() => {
+    if (gameState.playerColor) {
+      setAppMode('multiplayer');
+    }
+  }, [gameState.playerColor]);
+
   // Sync board orientation with multiplayer role
   useEffect(() => {
     if (appMode === 'multiplayer' && socket.role) {

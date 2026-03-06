@@ -124,7 +124,7 @@ io.on('connection', (socket) => {
         socketToRoom.set(socket.id, roomId);
         socket.join(roomId);
 
-        socket.emit('assign_color', 'w');
+        io.to(socket.id).emit('assign_color', 'w');
 
         callback({
             success: true,
@@ -178,11 +178,11 @@ io.on('connection', (socket) => {
         if (!room.playerWhite) {
             room.playerWhite = { socketId: socket.id, name: data.playerName || 'White' };
             role = 'white';
-            socket.emit('assign_color', 'w');
+            io.to(socket.id).emit('assign_color', 'w');
         } else if (!room.playerBlack) {
             room.playerBlack = { socketId: socket.id, name: data.playerName || 'Black' };
             role = 'black';
-            socket.emit('assign_color', 'b');
+            io.to(socket.id).emit('assign_color', 'b');
         } else {
             // Room is full — join as spectator
             room.spectators.set(socket.id, data.playerName || 'Spectator');
