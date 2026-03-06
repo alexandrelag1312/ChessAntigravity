@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useChessGame } from './hooks/useChessGame';
 import { useStockfish } from './hooks/useStockfish';
-import { useSocket, type PlayerRole } from './hooks/useSocket';
+import { useSocket } from './hooks/useSocket';
 import ChessBoard from './components/ChessBoard';
 import GameInfo from './components/GameInfo';
 import MoveHistory from './components/MoveHistory';
