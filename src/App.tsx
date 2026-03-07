@@ -98,6 +98,16 @@ export default function App() {
       if (socket.lastReceivedMove.timestamp === seenMoveTimestamp.current) return;
       seenMoveTimestamp.current = socket.lastReceivedMove.timestamp;
       console.log('[App] 📥 applying opponent move (silent):', socket.lastReceivedMove);
+
+      // Force audio unlock on mobile just before playing opponent sound
+      try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContextClass) {
+          const ctx = new AudioContextClass();
+          if (ctx.state === 'suspended') ctx.resume();
+        }
+      } catch { }
+
       gameState.applyRemoteMove(
         socket.lastReceivedMove.from,
         socket.lastReceivedMove.to,
@@ -107,7 +117,7 @@ export default function App() {
       if (typeof socket.lastReceivedMove.clockWhite === 'number') setClockWhite(socket.lastReceivedMove.clockWhite);
       if (typeof socket.lastReceivedMove.clockBlack === 'number') setClockBlack(socket.lastReceivedMove.clockBlack);
     }
-  }, [socket.lastReceivedMove, appMode]);
+  }, [socket.lastReceivedMove, appMode, gameState]);
 
   // ── Chess Clocks ──────────────────────────────────────────────────
   const DEFAULT_CLOCK = 10 * 60; // 10 minutes
