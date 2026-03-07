@@ -10,7 +10,23 @@ const SOUNDS = {
     gameEnd: 'https://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/game-end.mp3',
 } as const;
 
-const audioCache: Record<string, HTMLAudioElement> = {};
+// ─── NUCLEAR AUDIO FIX FOR iOS SAFARI ───────────────────────────────
+// We create raw, global HTMLAudioElements immediately
+const globalAudio = {
+    move: typeof window !== 'undefined' ? new Audio(SOUNDS.move) : null,
+    capture: typeof window !== 'undefined' ? new Audio(SOUNDS.capture) : null,
+    check: typeof window !== 'undefined' ? new Audio(SOUNDS.check) : null,
+    gameStart: typeof window !== 'undefined' ? new Audio(SOUNDS.gameStart) : null,
+    gameEnd: typeof window !== 'undefined' ? new Audio(SOUNDS.gameEnd) : null,
+};
+
+// Force preload
+if (typeof window !== 'undefined') {
+    Object.values(globalAudio).forEach(a => {
+        if (a) a.preload = 'auto';
+    });
+}
+
 let audioUnlocked = false;
 
 function unlockAudio() {
@@ -18,60 +34,61 @@ function unlockAudio() {
     audioUnlocked = true;
 
     try {
-        // Resume AudioContext to satisfy mobile browser policies
+        console.log("🔊 Déverrouillage Audio Mobile (Nuclear Fix)...");
+        // Resume AudioContext
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
         if (AudioContextClass) {
             const ctx = new AudioContextClass();
-            ctx.resume();
+            if (ctx.state === 'suspended') ctx.resume();
         }
 
-        // Silent playback to unlock all audio elements
-        Object.keys(SOUNDS).forEach((k) => {
-            const key = k as keyof typeof SOUNDS;
-            if (!audioCache[key]) {
-                const audio = new Audio(SOUNDS[key]);
-                audio.preload = 'auto';
-                audioCache[key] = audio;
+        // Force play/pause cycle on every global instance
+        Object.values(globalAudio).forEach((audio) => {
+            if (!audio) return;
+            audio.volume = 0;
+            const playPromise = audio.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    audio.pause();
+                    audio.currentTime = 0;
+                    audio.volume = 1;
+                }).catch(() => {
+                    audio.volume = 1;
+                });
             }
-            const audio = audioCache[key];
-            audio.volume = 0; // Silent unlock
-            audio.play().then(() => {
-                audio.pause();
-                audio.currentTime = 0;
-                audio.volume = 1; // Restore volume for real playback
-            }).catch(() => {
-                audio.volume = 1;
-            });
         });
-        console.log("🔊 Audio unlocked for mobile");
-    } catch {
-        // Ignore errors
-    }
+        console.log("🔊 Audio unlocked globally");
+    } catch { }
 
-    // Clean up listeners
     window.removeEventListener('click', unlockAudio);
     window.removeEventListener('touchstart', unlockAudio);
 }
 
-// Bind unlockers
 if (typeof window !== 'undefined') {
     window.addEventListener('click', unlockAudio, { once: true });
     window.addEventListener('touchstart', unlockAudio, { once: true });
 }
 
-function playSound(key: keyof typeof SOUNDS) {
+function playSound(key: keyof typeof SOUNDS, isRemote = false) {
     try {
-        if (!audioCache[key]) {
-            const audio = new Audio(SOUNDS[key]);
-            audio.preload = 'auto';
-            audioCache[key] = audio;
+        if (isRemote) {
+            console.log(`🔊 Tentative de lecture son ADVERSAIRE: ${key}`);
         }
-        const audio = audioCache[key];
-        audio.currentTime = 0;
-        audio.volume = 1;
-        audio.play().catch(() => { });
-    } catch {
-        // Ignore audio errors silently
+        const a = globalAudio[key];
+        if (!a) return;
+
+        a.pause();
+        a.currentTime = 0;
+        a.volume = 1;
+
+        const promise = a.play();
+        if (promise !== undefined) {
+            promise.catch(err => {
+                if (isRemote) console.warn("🔇 Échec audio adverse:", err);
+            });
+        }
+    } catch (e) {
+        if (isRemote) console.warn("🔇 Erreur critique audio:", e);
     }
 }
 
@@ -296,13 +313,13 @@ export function useChessGame(options: ChessGameOptions = {}): ChessGameState {
                 syncState();
                 // Audio for opponent move
                 if (game.isCheckmate() || game.isDraw() || game.isStalemate()) {
-                    playSound('gameEnd');
+                    playSound('gameEnd', true);
                 } else if (game.isCheck()) {
-                    playSound('check');
+                    playSound('check', true);
                 } else if (move.captured) {
-                    playSound('capture');
+                    playSound('capture', true);
                 } else {
-                    playSound('move');
+                    playSound('move', true);
                 }
             }
         } catch { }
