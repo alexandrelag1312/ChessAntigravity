@@ -11,14 +11,64 @@ const SOUNDS = {
 } as const;
 
 const audioCache: Record<string, HTMLAudioElement> = {};
+let audioUnlocked = false;
+
+function unlockAudio() {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+
+    try {
+        // Resume AudioContext to satisfy mobile browser policies
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContextClass) {
+            const ctx = new AudioContextClass();
+            ctx.resume();
+        }
+
+        // Silent playback to unlock all audio elements
+        Object.keys(SOUNDS).forEach((k) => {
+            const key = k as keyof typeof SOUNDS;
+            if (!audioCache[key]) {
+                const audio = new Audio(SOUNDS[key]);
+                audio.preload = 'auto';
+                audioCache[key] = audio;
+            }
+            const audio = audioCache[key];
+            audio.volume = 0; // Silent unlock
+            audio.play().then(() => {
+                audio.pause();
+                audio.currentTime = 0;
+                audio.volume = 1; // Restore volume for real playback
+            }).catch(() => {
+                audio.volume = 1;
+            });
+        });
+        console.log("🔊 Audio unlocked for mobile");
+    } catch {
+        // Ignore errors
+    }
+
+    // Clean up listeners
+    window.removeEventListener('click', unlockAudio);
+    window.removeEventListener('touchstart', unlockAudio);
+}
+
+// Bind unlockers
+if (typeof window !== 'undefined') {
+    window.addEventListener('click', unlockAudio, { once: true });
+    window.addEventListener('touchstart', unlockAudio, { once: true });
+}
 
 function playSound(key: keyof typeof SOUNDS) {
     try {
         if (!audioCache[key]) {
-            audioCache[key] = new Audio(SOUNDS[key]);
+            const audio = new Audio(SOUNDS[key]);
+            audio.preload = 'auto';
+            audioCache[key] = audio;
         }
         const audio = audioCache[key];
         audio.currentTime = 0;
+        audio.volume = 1;
         audio.play().catch(() => { });
     } catch {
         // Ignore audio errors silently
