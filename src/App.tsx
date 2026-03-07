@@ -381,23 +381,6 @@ export default function App() {
               )}
             </div>
 
-            {/* ══ MOBILE-ONLY: player row (below board) ══ */}
-            <div className="flex items-center gap-2 px-1 lg:hidden">
-              <div className="w-4 h-4 rounded-full border-2 border-border shrink-0"
-                style={{ backgroundColor: socket.playerColor === 'w' ? '#f5f5f5' : '#1a1a1a' }} />
-              <span className="text-sm font-semibold text-text-primary truncate flex-1">
-                <span className="text-xs font-medium text-text-muted uppercase tracking-wider shrink-0">You</span>
-                {appMode === 'multiplayer'
-                  ? (socket.playerColor === 'w' ? (socket.remoteState?.playerWhite?.name ?? 'You') : (socket.remoteState?.playerBlack?.name ?? 'You'))
-                  : 'You'}
-              </span>
-              <span className="text-xs px-2 py-0.5 rounded-full font-bold ${(boardOrientation === 'white' ? gameState.turn === 'w' : gameState.turn === 'b')
-                ? 'bg-accent text-white' : 'bg-surface-raised text-text-muted border border-border'
-                }">
-                {(boardOrientation === 'white' ? gameState.turn === 'w' : gameState.turn === 'b') ? '▶ Your turn' : 'Waiting…'}
-              </span>
-            </div>
-
             {/* ══════════════════════ RIGHT COLUMN (desktop + mobile) ══════════ */}
             <div className="flex flex-col gap-4 lg:order-3">
 

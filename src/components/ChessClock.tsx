@@ -22,8 +22,8 @@ export default function ChessClock({ timeSeconds, isActive, label, color, player
     return (
         <div
             className={`flex items-center gap-3 rounded-xl px-4 py-2.5 border transition-all duration-300 ${isActive
-                    ? 'border-accent bg-accent/10 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
-                    : 'border-border bg-surface-raised'
+                ? 'border-accent bg-accent/10 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
+                : 'border-border bg-surface-raised'
                 }`}
         >
             {/* Color indicator */}
@@ -34,7 +34,14 @@ export default function ChessClock({ timeSeconds, isActive, label, color, player
 
             {/* Player info */}
             <div className="flex-1 min-w-0">
-                <div className="text-xs text-text-muted font-medium truncate">{label}</div>
+                <div className="text-xs text-text-muted font-medium truncate flex items-center gap-2">
+                    {label}
+                    {label === 'You' && (
+                        <span className={`text-[9px] uppercase tracking-wider font-bold px-1.5 py-[1px] rounded ${isActive ? 'bg-accent/20 text-accent' : 'bg-surface border border-border text-text-muted/70'}`}>
+                            {isActive ? 'Your turn' : 'Waiting...'}
+                        </span>
+                    )}
+                </div>
                 {playerName && (
                     <div className="text-sm font-semibold text-text-primary truncate">{playerName}</div>
                 )}
@@ -45,12 +52,12 @@ export default function ChessClock({ timeSeconds, isActive, label, color, player
                 animate={isLow && isActive ? { scale: [1, 1.05, 1] } : {}}
                 transition={{ repeat: Infinity, duration: 1 }}
                 className={`font-mono text-xl font-bold tabular-nums tracking-tight ${isOut
-                        ? 'text-red-500'
-                        : isLow
-                            ? 'text-orange-400'
-                            : isActive
-                                ? 'text-accent'
-                                : 'text-text-secondary'
+                    ? 'text-red-500'
+                    : isLow
+                        ? 'text-orange-400'
+                        : isActive
+                            ? 'text-accent'
+                            : 'text-text-secondary'
                     }`}
             >
                 {formatTime(timeSeconds)}
