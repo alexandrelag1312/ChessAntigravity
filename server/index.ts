@@ -136,12 +136,20 @@ setInterval(() => {
 // ─── Express + Server ───────────────────────────────────────────────
 const app = express();
 
+// 1. CORS FIRST (Crucial for 502/503 responses to not be blocked by browser)
+app.use(cors({
+    origin: process.env.FRONTEND_URL || 'https://chess-antigravity.vercel.app',
+    credentials: true
+}));
+
+// 2. Health Endpoint SECOND (Crucial for Railway to keep the container alive)
+app.get('/health', (req, res) => res.status(200).send('OK'));
+
 app.use((req, res, next) => {
     console.log(`[HTTP] ${req.method} ${req.url} - Origin: ${req.headers.origin}`);
     next();
 });
 
-app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json());
 
 app.use('/api/auth', authRoutes);
@@ -156,11 +164,6 @@ const io = new Server(httpServer, {
     // NOTE: connectionStateRecovery is disabled.
     // Railway does not guarantee sticky sessions, so recovery packets
     // can land on a different node and cause an endless reconnect storm.
-});
-
-// ─── Health endpoint ────────────────────────────────────────────────
-app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', rooms: rooms.size });
 });
 
 // ─── Authenticated Social Registry ────────────────────────────────────
