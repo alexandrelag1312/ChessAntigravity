@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import { User } from '../models/User.js';
 
 const router = Router();
@@ -12,6 +13,11 @@ router.post('/register', async (req, res) => {
         if (!process.env.JWT_SECRET) {
             console.error('❌ CRITICAL: JWT_SECRET is missing from Environment Variables!');
             // We proceed with the fallback secret for now so it doesn't crash, but log loudly.
+        }
+
+        console.log("Current DB Connection State:", mongoose.connection.readyState);
+        if (mongoose.connection.readyState !== 1) {
+            return res.status(503).json({ error: 'Database not connected. Please try again in a moment.' });
         }
 
         console.log(`\n[auth/register] ➔ Incoming signup request from IP: ${req.ip}`);
@@ -64,6 +70,11 @@ router.post('/register', async (req, res) => {
 // ── LOGIN ───────────────────────────────────────────────────────────
 router.post('/login', async (req, res) => {
     try {
+        console.log("Current DB Connection State:", mongoose.connection.readyState);
+        if (mongoose.connection.readyState !== 1) {
+            return res.status(503).json({ error: 'Database not connected. Please try again in a moment.' });
+        }
+
         const { username, password } = req.body;
 
         if (!username || !password) {

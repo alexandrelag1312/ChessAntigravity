@@ -15,7 +15,7 @@ dotenv.config();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_chess_antigravity';
 
 // ─── Database ───────────────────────────────────────────────────────
-const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URL || process.env.MONGODB_URL;
+const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URL || process.env.DATABASE_URL;
 if (!MONGODB_URI) {
     console.warn('⚠️ NO MONGODB_URI PROVIDED - Attempting localhost fallback...');
 } else {
@@ -24,6 +24,7 @@ if (!MONGODB_URI) {
 
 const connectDB = async () => {
     try {
+        mongoose.set('bufferCommands', false); // Fix: Do not wait 10s if DB is offline
         await mongoose.connect(MONGODB_URI || 'mongodb://localhost:27017/chessantigravity', {
             serverSelectionTimeoutMS: 5000 // Non-blocking fast-fail
         });
