@@ -3,9 +3,9 @@ import { motion } from 'framer-motion';
 interface ChessClockProps {
     timeSeconds: number;
     isActive: boolean;
-    label: string;
     color: 'w' | 'b';
     playerName?: string;
+    isMe?: boolean;
 }
 
 function formatTime(seconds: number): string {
@@ -15,9 +15,10 @@ function formatTime(seconds: number): string {
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export default function ChessClock({ timeSeconds, isActive, label, color, playerName }: ChessClockProps) {
+export default function ChessClock({ timeSeconds, isActive, color, playerName, isMe }: ChessClockProps) {
     const isLow = timeSeconds <= 60 && timeSeconds > 0;
     const isOut = timeSeconds <= 0;
+    const displayName = playerName || 'Guest';
 
     return (
         <div
@@ -34,17 +35,16 @@ export default function ChessClock({ timeSeconds, isActive, label, color, player
 
             {/* Player info */}
             <div className="flex-1 min-w-0">
-                <div className="text-xs text-text-muted font-medium truncate flex items-center gap-2">
-                    {label}
-                    {label === 'You' && (
-                        <span className={`text-[9px] uppercase tracking-wider font-bold px-1.5 py-[1px] rounded ${isActive ? 'bg-accent/20 text-accent' : 'bg-surface border border-border text-text-muted/70'}`}>
-                            {isActive ? 'Your turn' : 'Waiting...'}
+                <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-sm font-bold text-text-primary truncate">
+                        {displayName}
+                    </span>
+                    {isMe && (
+                        <span className={`text-[9px] uppercase tracking-wider font-bold px-1.5 py-[1px] rounded ${isActive ? 'bg-accent/20 text-accent border border-accent/10' : 'bg-surface border border-border text-text-muted/70'}`}>
+                            {isActive ? 'Your turn' : 'Waiting'}
                         </span>
                     )}
                 </div>
-                {playerName && (
-                    <div className="text-sm font-semibold text-text-primary truncate">{playerName}</div>
-                )}
             </div>
 
             {/* Clock */}

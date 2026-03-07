@@ -381,7 +381,38 @@ export default function App() {
 
 
             {/* ══════════════════════ LEFT COLUMN (desktop) ════════════════════ */}
-            <div className="flex flex-col gap-4 lg:order-1 order-last">
+            <div className="flex flex-col gap-4 lg:order-1 order-last w-full max-w-[280px] mx-auto lg:mx-0">
+              {/* User Profile Card */}
+              <div className="rounded-xl p-4 backdrop-blur-md border border-border bg-surface-overlay flex flex-col items-center justify-center text-center shadow-sm">
+                {social.currentUser ? (
+                  <>
+                    <div className="w-12 h-12 mb-3 rounded-full bg-gradient-to-tr from-accent to-purple-500 flex items-center justify-center text-white font-bold text-xl shadow-inner mx-auto">
+                      {social.currentUser.username.charAt(0).toUpperCase()}
+                    </div>
+                    <h3 className="text-lg font-bold text-text-primary mb-1">{social.currentUser.username}</h3>
+                    <div className="flex items-center justify-center gap-3 text-sm text-text-muted font-medium mb-3">
+                      <span className="text-green-500">{social.currentUser.stats.wins}W</span>
+                      <span className="text-red-500">{social.currentUser.stats.losses}L</span>
+                      <span className="text-gray-400">{social.currentUser.stats.draws}D</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-12 h-12 mb-3 rounded-full bg-surface-raised border-2 border-dashed border-border flex items-center justify-center text-text-muted text-xl mx-auto">
+                      👤
+                    </div>
+                    <h3 className="text-lg font-bold text-text-primary mb-1">Guest Player</h3>
+                    <p className="text-xs text-text-muted mb-4 max-w-[200px] mx-auto">Sign in to save matches and add friends.</p>
+                    <button
+                      onClick={() => setShowAuthModal(true)}
+                      className="w-full py-2 bg-accent/10 hover:bg-accent/20 text-accent text-sm font-bold border border-accent/20 rounded-lg transition-colors"
+                    >
+                      Login / Signup
+                    </button>
+                  </>
+                )}
+              </div>
+
               <GameControls
                 onNewGame={handleNewGame}
                 onUndo={handleUndo}
@@ -443,21 +474,24 @@ export default function App() {
                 const myColor = socket.playerColor || (boardOrientation === 'white' ? 'w' : 'b');
                 const oppColor = myColor === 'w' ? 'b' : 'w';
 
+                const myName = social.currentUser?.username || 'Guest';
+                const oppName = oppColor === 'w' ? socket.remoteState?.playerWhite?.name : socket.remoteState?.playerBlack?.name;
+
                 return (
                   <div className="flex flex-col gap-2">
                     <ChessClock
                       timeSeconds={oppColor === 'w' ? clockWhite : clockBlack}
                       isActive={gameState.turn === oppColor}
-                      label="Opponent"
                       color={oppColor}
-                      playerName={oppColor === 'w' ? socket.remoteState?.playerWhite?.name : socket.remoteState?.playerBlack?.name}
+                      playerName={oppName}
+                      isMe={false}
                     />
                     <ChessClock
                       timeSeconds={myColor === 'w' ? clockWhite : clockBlack}
                       isActive={gameState.turn === myColor}
-                      label="You"
                       color={myColor}
-                      playerName={myColor === 'w' ? socket.remoteState?.playerWhite?.name : socket.remoteState?.playerBlack?.name}
+                      playerName={myName}
+                      isMe={true}
                     />
                   </div>
                 );
@@ -487,6 +521,11 @@ export default function App() {
                     {socket.role !== 'spectator' && !gameState.isGameOver && (
                       <button onClick={socket.emitResign} className="px-3 py-1.5 rounded-lg bg-surface border border-border text-text-muted hover:text-text-primary transition-colors text-xs font-bold">
                         Resign
+                      </button>
+                    )}
+                    {social.currentUser && (
+                      <button onClick={social.logout} className="px-3 py-1.5 rounded-lg bg-surface border border-border text-text-muted hover:text-red-400 transition-colors text-xs font-bold">
+                        Logout
                       </button>
                     )}
                     <button onClick={socket.leaveRoom} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors text-xs font-bold">
