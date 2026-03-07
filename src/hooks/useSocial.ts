@@ -18,7 +18,9 @@ export function useSocial(socket: Socket | null) {
     const [incomingRequests, setIncomingRequests] = useState<{ _id: string, username: string }[]>([]);
     const [outgoingRequests, setOutgoingRequests] = useState<{ _id: string, username: string }[]>([]);
 
-    const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000/api';
+    const API_URL = import.meta.env.VITE_BACKEND_URL
+        ? `${import.meta.env.VITE_BACKEND_URL.replace(/\/$/, '')}/api`
+        : 'http://localhost:3000/api';
 
     // Headers helper
     const getHeaders = useCallback(() => ({

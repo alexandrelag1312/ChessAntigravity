@@ -14,7 +14,9 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
-    const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000/api';
+    const API_URL = import.meta.env.VITE_BACKEND_URL
+        ? `${import.meta.env.VITE_BACKEND_URL.replace(/\/$/, '')}/api`
+        : 'http://localhost:3000/api';
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -23,7 +25,11 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps
 
         try {
             const endpoint = mode === 'login' ? '/auth/login' : '/auth/register';
-            const res = await fetch(`${API_URL}${endpoint}`, {
+            const finalUrl = `${API_URL}${endpoint}`;
+
+            console.log("🚀 Calling API:", finalUrl);
+
+            const res = await fetch(finalUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password })
