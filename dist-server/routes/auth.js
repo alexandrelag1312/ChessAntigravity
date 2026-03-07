@@ -7,6 +7,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_chess_antigravity'
 // ── REGISTER ────────────────────────────────────────────────────────
 router.post('/register', async (req, res) => {
     try {
+        if (!process.env.JWT_SECRET) {
+            console.error('❌ CRITICAL: JWT_SECRET is missing from Environment Variables!');
+            // We proceed with the fallback secret for now so it doesn't crash, but log loudly.
+        }
         console.log(`\n[auth/register] ➔ Incoming signup request from IP: ${req.ip}`);
         console.log(`[auth/register] ➔ Body:`, { username: req.body.username, passwordLength: req.body.password?.length });
         const { username, password } = req.body;
@@ -42,8 +46,8 @@ router.post('/register', async (req, res) => {
         });
     }
     catch (error) {
-        console.error('Registration error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('❌ Registration Crash:', error);
+        res.status(500).json({ error: error.message || 'Internal server error' });
     }
 });
 // ── LOGIN ───────────────────────────────────────────────────────────
@@ -74,8 +78,8 @@ router.post('/login', async (req, res) => {
         });
     }
     catch (error) {
-        console.error('Login error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('❌ Login Crash:', error);
+        res.status(500).json({ error: error.message || 'Internal server error' });
     }
 });
 // ── ME (Verify Token) ───────────────────────────────────────────────
