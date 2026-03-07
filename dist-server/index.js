@@ -19,12 +19,20 @@ if (!MONGODB_URI) {
 else {
     console.log(`[server] MONGODB_URI is configured (Starts with: ${MONGODB_URI.substring(0, 15)}...)`);
 }
-mongoose.connect(MONGODB_URI || 'mongodb://localhost:27017/chessantigravity')
-    .then(() => console.log('📦 Connected to MongoDB successfully'))
-    .catch(err => {
-    console.error('❌ MongoDB Connection Error:', err);
-    console.error('   -> Have you properly set MONGODB_URI in your Railway Variables?');
-});
+const connectDB = async () => {
+    try {
+        await mongoose.connect(MONGODB_URI || 'mongodb://localhost:27017/chessantigravity', {
+            serverSelectionTimeoutMS: 5000 // Non-blocking fast-fail
+        });
+        console.log('📦 Connected to MongoDB successfully');
+    }
+    catch (err) {
+        console.error('❌ MongoDB Connection Error (Non-Blocking):', err.message);
+        console.error('   -> Have you properly set MONGODB_URI in your Railway Variables?');
+    }
+};
+// Start connection asynchronously (non-blocking for HTTP server)
+connectDB();
 // ─── Room Management ────────────────────────────────────────────────
 const rooms = new Map();
 const socketToRoom = new Map(); // socketId → roomId
@@ -489,9 +497,9 @@ io.on('connection', async (socket) => {
     });
 });
 // ─── Start ──────────────────────────────────────────────────────────
-const PORT = parseInt(process.env.PORT || '3000', 10);
-httpServer.listen(PORT, '0.0.0.0', () => {
+const PORT = process.env.PORT || 8080;
+httpServer.listen(PORT, () => {
     console.log(`\n  ♟  ChessAntigravity Server`);
-    console.log(`  🌐 http://0.0.0.0:${PORT}`);
+    console.log(`  🌐 Listening on port ${PORT}`);
     console.log(`  🔌 Socket.io ready with connectionStateRecovery\n`);
 });
