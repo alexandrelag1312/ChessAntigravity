@@ -7,6 +7,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_chess_antigravity'
 // ── REGISTER ────────────────────────────────────────────────────────
 router.post('/register', async (req, res) => {
     try {
+        console.log(`\n[auth/register] ➔ Incoming signup request from IP: ${req.ip}`);
+        console.log(`[auth/register] ➔ Body:`, { username: req.body.username, passwordLength: req.body.password?.length });
         const { username, password } = req.body;
         if (!username || !password) {
             return res.status(400).json({ error: 'Username and password are required' });

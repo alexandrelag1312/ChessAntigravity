@@ -15,10 +15,19 @@ dotenv.config();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_chess_antigravity';
 
 // ─── Database ───────────────────────────────────────────────────────
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/chessantigravity';
-mongoose.connect(MONGODB_URI)
-    .then(() => console.log('📦 Connected to MongoDB'))
-    .catch(err => console.error('❌ MongoDB Connection Error:', err));
+const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URL || process.env.MONGODB_URL;
+if (!MONGODB_URI) {
+    console.warn('⚠️ NO MONGODB_URI PROVIDED - Attempting localhost fallback...');
+} else {
+    console.log(`[server] MONGODB_URI is configured (Starts with: ${MONGODB_URI.substring(0, 15)}...)`);
+}
+
+mongoose.connect(MONGODB_URI || 'mongodb://localhost:27017/chessantigravity')
+    .then(() => console.log('📦 Connected to MongoDB successfully'))
+    .catch(err => {
+        console.error('❌ MongoDB Connection Error:', err);
+        console.error('   -> Have you properly set MONGODB_URI in your Railway Variables?');
+    });
 
 // ─── Types ──────────────────────────────────────────────────────────
 interface Player {
@@ -117,6 +126,12 @@ setInterval(() => {
 
 // ─── Express + Server ───────────────────────────────────────────────
 const app = express();
+
+app.use((req, res, next) => {
+    console.log(`[HTTP] ${req.method} ${req.url} - Origin: ${req.headers.origin}`);
+    next();
+});
+
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json());
 
