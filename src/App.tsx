@@ -12,6 +12,9 @@ import Chat from './components/Chat';
 import PromotionOverlay from './components/PromotionOverlay';
 import ChessClock from './components/ChessClock';
 import GameOverModal from './components/GameOverModal';
+import AuthModal from './components/AuthModal';
+import FriendsPanel from './components/FriendsPanel';
+import { useSocial } from './hooks/useSocial';
 import { motion } from 'framer-motion';
 import { themes, defaultTheme, type BoardTheme } from './logic/themes';
 
@@ -34,6 +37,10 @@ export default function App() {
 
   // URL processing for auto-join
   const initialRoomParam = new URLSearchParams(window.location.search).get('room') || '';
+
+  const social = useSocial(socket.socket);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showFriendsPanel, setShowFriendsPanel] = useState(false);
 
   const [appMode, setAppMode] = useState<'local' | 'multiplayer'>(initialRoomParam ? 'multiplayer' : 'local');
   const [boardOrientation, setBoardOrientation] = useState<'white' | 'black'>('white');
@@ -288,6 +295,31 @@ export default function App() {
         transition={{ duration: 0.5 }}
         className="text-center py-6 lg:py-8 w-full relative max-w-5xl px-4"
       >
+        <div className="absolute top-6 left-4 lg:left-0 flex gap-2">
+          {social.token ? (
+            <div className="flex gap-2 items-center">
+              <button onClick={() => setShowFriendsPanel(true)} className="relative px-3 py-1.5 rounded-lg text-sm font-bold bg-surface border border-border text-text-primary shadow-sm hover:scale-105 transition-transform flex items-center gap-1">
+                <span>👥</span> Friends
+                {social.incomingRequests.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-[10px] text-white flex items-center justify-center">
+                    {social.incomingRequests.length}
+                  </span>
+                )}
+              </button>
+              <button onClick={social.logout} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-500/10 border border-red-500/20 text-red-500 shadow-sm hover:bg-red-500/20 transition-colors">
+                Logout ({social.currentUser?.username})
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="px-4 py-1.5 rounded-lg text-sm font-bold bg-accent text-white shadow-sm hover:bg-accent/90 transition-colors"
+            >
+              Sign In
+            </button>
+          )}
+        </div>
+
         <div className="absolute top-6 right-4 hidden lg:flex gap-2">
           <button
             onClick={() => setAppMode(prev => prev === 'local' ? 'multiplayer' : 'local')}
@@ -307,7 +339,7 @@ export default function App() {
         </p>
 
         {/* Mobile toggle */}
-        <div className="mt-4 flex lg:hidden justify-center">
+        <div className="mt-4 flex lg:hidden justify-center gap-2">
           <button
             onClick={() => setAppMode(prev => prev === 'local' ? 'multiplayer' : 'local')}
             className="px-4 py-1.5 rounded-full text-xs font-bold bg-surface-raised border border-border text-accent shadow-sm"
@@ -323,8 +355,8 @@ export default function App() {
           // Lobby View
           <div className="w-full h-full flex items-center justify-center mt-12">
             <Lobby
-              onCreateRoom={socket.createRoom}
-              onJoinRoom={socket.joinRoom}
+              onCreateRoom={(name, casual) => socket.createRoom(social.currentUser?.username || name, casual)}
+              onJoinRoom={(id, name) => socket.joinRoom(id, social.currentUser?.username || name)}
               initialRoomId={initialRoomParam}
             />
           </div>
@@ -507,6 +539,32 @@ export default function App() {
           handleNewGame();
         }}
         onReviewBoard={() => setShowGameOverModal(false)}
+      />
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={(token, user) => {
+          social.setToken(token);
+          setShowAuthModal(false);
+        }}
+      />
+
+      {/* Friends Panel */}
+      <FriendsPanel
+        isOpen={showFriendsPanel}
+        onClose={() => setShowFriendsPanel(false)}
+        social={social}
+        onInvite={(friendId) => {
+          // Future invite system hook: we'll create a room and emit an invite through social
+          socket.createRoom(social.currentUser?.username || 'Player', true);
+          setShowFriendsPanel(false);
+          // Wait briefly, then copy invite and alert them. The full push invite is complex.
+          setTimeout(() => {
+            handleCopyInvite();
+          }, 300);
+        }}
       />
     </div>
   );

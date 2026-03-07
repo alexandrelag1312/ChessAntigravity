@@ -3,6 +3,22 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { Chess } from 'chess.js';
+import dotenv from 'dotenv';
+import mongoose from 'mongoose';
+import jwt from 'jsonwebtoken';
+import { User } from './models/User.js';
+import authRoutes from './routes/auth.js';
+import friendsRoutes from './routes/friends.js';
+
+dotenv.config();
+
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_chess_antigravity';
+
+// ─── Database ───────────────────────────────────────────────────────
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/chessantigravity';
+mongoose.connect(MONGODB_URI)
+    .then(() => console.log('📦 Connected to MongoDB'))
+    .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
 // ─── Types ──────────────────────────────────────────────────────────
 interface Player {
@@ -99,10 +115,13 @@ setInterval(() => {
     }
 }, 60_000);
 
-// ─── Express + Socket.io ────────────────────────────────────────────
+// ─── Express + Server ───────────────────────────────────────────────
 const app = express();
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json());
+
+app.use('/api/auth', authRoutes);
+app.use('/api/friends', friendsRoutes);
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -120,9 +139,49 @@ app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', rooms: rooms.size });
 });
 
+// ─── Authenticated Social Registry ────────────────────────────────────
+// Map<userId (string), Set<socketId (string)>>
+const activeUsers = new Map<string, Set<string>>();
+
+io.use(async (socket, next) => {
+    const token = socket.handshake.auth?.token;
+    if (token) {
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET) as { id: string, username: string };
+            (socket as any).userId = decoded.id;
+            (socket as any).username = decoded.username;
+        } catch { } // Ignore bad tokens, just treat as guest
+    }
+    next();
+});
+
 // ─── Socket.io Events ───────────────────────────────────────────────
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
     console.log(`[connect] ${socket.id}`);
+    const userId = (socket as any).userId;
+    const username = (socket as any).username;
+
+    if (userId) {
+        if (!activeUsers.has(userId)) activeUsers.set(userId, new Set());
+        activeUsers.get(userId)!.add(socket.id);
+
+        console.log(`[auth] User ${username} connected via socket`);
+
+        // Broadcast to friends that we are online
+        try {
+            const user = await User.findById(userId).populate('friends');
+            if (user) {
+                user.friends.forEach((friend: any) => {
+                    const friendSocketIds = activeUsers.get(friend._id.toString());
+                    if (friendSocketIds) {
+                        friendSocketIds.forEach(id => {
+                            io.to(id).emit('friend_online', { userId, username });
+                        });
+                    }
+                });
+            }
+        } catch { }
+    }
 
     // ── Create Room ─────────────────────────────────────────────────
     socket.on('create_room', (data: { playerName: string; casualMode: boolean }, callback) => {
@@ -440,6 +499,31 @@ io.on('connection', (socket) => {
         }
 
         socketToRoom.delete(socket.id);
+
+        // Notify friends offline
+        const userId = (socket as any).userId;
+        if (userId) {
+            const userSockets = activeUsers.get(userId);
+            if (userSockets) {
+                userSockets.delete(socket.id);
+                if (userSockets.size === 0) {
+                    activeUsers.delete(userId);
+                    // Broadcast offline
+                    User.findById(userId).populate('friends').then(user => {
+                        if (user) {
+                            user.friends.forEach((friend: any) => {
+                                const friendSocketIds = activeUsers.get(friend._id.toString());
+                                if (friendSocketIds) {
+                                    friendSocketIds.forEach(id => {
+                                        io.to(id).emit('friend_offline', { userId });
+                                    });
+                                }
+                            });
+                        }
+                    }).catch(() => { });
+                }
+            }
+        }
     });
 });
 

@@ -3,6 +3,19 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { Chess } from 'chess.js';
+import dotenv from 'dotenv';
+import mongoose from 'mongoose';
+import jwt from 'jsonwebtoken';
+import { User } from './models/User.js';
+import authRoutes from './routes/auth.js';
+import friendsRoutes from './routes/friends.js';
+dotenv.config();
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_chess_antigravity';
+// ─── Database ───────────────────────────────────────────────────────
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/chessantigravity';
+mongoose.connect(MONGODB_URI)
+    .then(() => console.log('📦 Connected to MongoDB'))
+    .catch(err => console.error('❌ MongoDB Connection Error:', err));
 // ─── Room Management ────────────────────────────────────────────────
 const rooms = new Map();
 const socketToRoom = new Map(); // socketId → roomId
@@ -27,6 +40,18 @@ function getRoomRole(room, socketId) {
     return null;
 }
 function getRoomSnapshot(room) {
+    // Calculate current elapsed time for the active clock
+    let clockWhite = room.clockWhite;
+    let clockBlack = room.clockBlack;
+    if (room.clockStarted && room.lastMoveAt) {
+        const elapsed = Math.floor((Date.now() - room.lastMoveAt) / 1000);
+        if (room.game.turn() === 'w') {
+            clockWhite = Math.max(0, clockWhite - elapsed);
+        }
+        else {
+            clockBlack = Math.max(0, clockBlack - elapsed);
+        }
+    }
     return {
         roomId: room.roomId,
         fen: room.game.fen(),
@@ -41,7 +66,10 @@ function getRoomSnapshot(room) {
         playerBlack: room.playerBlack ? { name: room.playerBlack.name, connected: !room.playerBlack.disconnectedAt } : null,
         spectatorCount: room.spectators.size,
         casualMode: room.casualMode,
-        chatHistory: room.chatHistory.slice(-50), // last 50 messages
+        chatHistory: room.chatHistory.slice(-50),
+        clockWhite,
+        clockBlack,
+        clockStarted: room.clockStarted,
     };
 }
 // Clean up rooms older than 2 hours with no players
@@ -55,28 +83,67 @@ setInterval(() => {
         }
     }
 }, 60_000);
-// ─── Express + Socket.io ────────────────────────────────────────────
+// ─── Express + Server ───────────────────────────────────────────────
 const app = express();
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json());
+app.use('/api/auth', authRoutes);
+app.use('/api/friends', friendsRoutes);
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
         origin: process.env.FRONTEND_URL || '*',
         methods: ['GET', 'POST'],
     },
-    connectionStateRecovery: {
-        maxDisconnectionDuration: 60_000, // 60 seconds
-        skipMiddlewares: true,
-    },
+    // NOTE: connectionStateRecovery is disabled.
+    // Railway does not guarantee sticky sessions, so recovery packets
+    // can land on a different node and cause an endless reconnect storm.
 });
 // ─── Health endpoint ────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', rooms: rooms.size });
 });
+// ─── Authenticated Social Registry ────────────────────────────────────
+// Map<userId (string), Set<socketId (string)>>
+const activeUsers = new Map();
+io.use(async (socket, next) => {
+    const token = socket.handshake.auth?.token;
+    if (token) {
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            socket.userId = decoded.id;
+            socket.username = decoded.username;
+        }
+        catch { } // Ignore bad tokens, just treat as guest
+    }
+    next();
+});
 // ─── Socket.io Events ───────────────────────────────────────────────
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
     console.log(`[connect] ${socket.id}`);
+    const userId = socket.userId;
+    const username = socket.username;
+    if (userId) {
+        if (!activeUsers.has(userId))
+            activeUsers.set(userId, new Set());
+        activeUsers.get(userId).add(socket.id);
+        console.log(`[auth] User ${username} connected via socket`);
+        // Broadcast to friends that we are online
+        try {
+            const user = await User.findById(userId).populate('friends');
+            if (user) {
+                user.friends.forEach((friend) => {
+                    const friendSocketIds = activeUsers.get(friend._id.toString());
+                    if (friendSocketIds) {
+                        friendSocketIds.forEach(id => {
+                            io.to(id).emit('friend_online', { userId, username });
+                        });
+                    }
+                });
+            }
+        }
+        catch { }
+    }
     // ── Create Room ─────────────────────────────────────────────────
     socket.on('create_room', (data, callback) => {
         const roomId = generateRoomCode();
@@ -89,10 +156,17 @@ io.on('connection', (socket) => {
             chatHistory: [],
             casualMode: data.casualMode ?? false,
             createdAt: Date.now(),
+            clockWhite: 10 * 60,
+            clockBlack: 10 * 60,
+            clockStarted: false,
+            lastMoveAt: null,
         };
         rooms.set(roomId, room);
         socketToRoom.set(socket.id, roomId);
         socket.join(roomId);
+        io.to(socket.id).emit('assign_color', 'w');
+        io.to(socket.id).emit('player_assigned', { color: 'w', roomId: roomId });
+        console.log(`Joueur ${socket.id} assigné à w dans ${roomId}`);
         callback({
             success: true,
             roomId,
@@ -118,6 +192,9 @@ io.on('connection', (socket) => {
                 room.playerWhite.disconnectedAt = undefined;
                 socketToRoom.set(socket.id, roomId);
                 socket.join(roomId);
+                // Re-send color assignment so frontend state is restored
+                io.to(socket.id).emit('assign_color', 'w');
+                io.to(socket.id).emit('player_assigned', { color: 'w', roomId });
                 io.to(roomId).emit('player_reconnected', { role: 'white', name: room.playerWhite.name });
                 callback({ success: true, roomId, role: 'white', state: getRoomSnapshot(room) });
                 console.log(`[reconnect] ${socket.id} as White in ${roomId}`);
@@ -129,6 +206,9 @@ io.on('connection', (socket) => {
                 room.playerBlack.disconnectedAt = undefined;
                 socketToRoom.set(socket.id, roomId);
                 socket.join(roomId);
+                // Re-send color assignment so frontend state is restored
+                io.to(socket.id).emit('assign_color', 'b');
+                io.to(socket.id).emit('player_assigned', { color: 'b', roomId });
                 io.to(roomId).emit('player_reconnected', { role: 'black', name: room.playerBlack.name });
                 callback({ success: true, roomId, role: 'black', state: getRoomSnapshot(room) });
                 console.log(`[reconnect] ${socket.id} as Black in ${roomId}`);
@@ -137,13 +217,16 @@ io.on('connection', (socket) => {
         }
         // Normal join logic
         let role;
+        let assignedColor = null;
         if (!room.playerWhite) {
             room.playerWhite = { socketId: socket.id, name: data.playerName || 'White' };
             role = 'white';
+            assignedColor = 'w';
         }
         else if (!room.playerBlack) {
             room.playerBlack = { socketId: socket.id, name: data.playerName || 'Black' };
             role = 'black';
+            assignedColor = 'b';
         }
         else {
             // Room is full — join as spectator
@@ -152,6 +235,11 @@ io.on('connection', (socket) => {
         }
         socketToRoom.set(socket.id, roomId);
         socket.join(roomId);
+        if (assignedColor) {
+            io.to(socket.id).emit('assign_color', assignedColor);
+            io.to(socket.id).emit('player_assigned', { color: assignedColor, roomId: roomId });
+            console.log(`Joueur ${socket.id} assigné à ${assignedColor} dans ${roomId}`);
+        }
         // Notify everyone
         io.to(roomId).emit('player_joined', {
             role,
@@ -199,10 +287,35 @@ io.on('connection', (socket) => {
                 callback?.({ success: false, error: 'Invalid move' });
                 return;
             }
-            // Broadcast to entire room (including sender for confirmation)
-            io.to(roomId).emit('sync_state', getRoomSnapshot(room));
-            callback?.({ success: true });
-            console.log(`[move] ${roomId} ${move.san} by ${role}`);
+            // Update clocks
+            const now = Date.now();
+            if (!room.clockStarted) {
+                room.clockStarted = true;
+            }
+            else if (room.lastMoveAt) {
+                const elapsed = Math.floor((now - room.lastMoveAt) / 1000);
+                // The player who JUST moved was the previous turn
+                if (move.color === 'w') {
+                    room.clockWhite = Math.max(0, room.clockWhite - elapsed);
+                }
+                else {
+                    room.clockBlack = Math.max(0, room.clockBlack - elapsed);
+                }
+            }
+            room.lastMoveAt = now;
+            console.log(`[move_made] Relaying move to room: ${roomId} | ${move.san} by ${role}`);
+            socket.to(roomId).emit('move_received', {
+                from: data.from,
+                to: data.to,
+                promotion: data.promotion,
+                clockWhite: room.clockWhite,
+                clockBlack: room.clockBlack,
+            });
+            // Send updated board state to all OTHER players (not sender)
+            socket.to(roomId).emit('sync_state', getRoomSnapshot(room));
+            // Also return clocks to the sender via callback
+            callback?.({ success: true, clockWhite: room.clockWhite, clockBlack: room.clockBlack });
+            console.log(`[move_made] ✅ ${roomId} ${move.san} by ${role} → relayed`);
         }
         catch {
             callback?.({ success: false, error: 'Invalid move' });
@@ -257,6 +370,28 @@ io.on('connection', (socket) => {
         else {
             callback?.({ success: false });
         }
+    });
+    // ── Resignation ─────────────────────────────────────────────────
+    socket.on('resign', () => {
+        const roomId = socketToRoom.get(socket.id);
+        if (!roomId)
+            return;
+        const room = rooms.get(roomId);
+        if (!room)
+            return;
+        const role = getRoomRole(room, socket.id);
+        if (role !== 'white' && role !== 'black')
+            return;
+        const loserColor = role === 'white' ? 'w' : 'b';
+        const loserName = role === 'white' ? room.playerWhite?.name : room.playerBlack?.name;
+        room.chatHistory.push({
+            sender: '📢 System',
+            text: `${loserName} has resigned.`,
+            timestamp: Date.now(),
+        });
+        console.log(`[resign] ${role} resigned in ${roomId}`);
+        io.to(roomId).emit('opponent_resigned', { loserColor });
+        io.to(roomId).emit('sync_state', getRoomSnapshot(room));
     });
     // ── New Game (both players must be present) ─────────────────────
     socket.on('new_game', () => {
@@ -314,6 +449,30 @@ io.on('connection', (socket) => {
             io.to(roomId).emit('spectator_left', { count: room.spectators.size });
         }
         socketToRoom.delete(socket.id);
+        // Notify friends offline
+        const userId = socket.userId;
+        if (userId) {
+            const userSockets = activeUsers.get(userId);
+            if (userSockets) {
+                userSockets.delete(socket.id);
+                if (userSockets.size === 0) {
+                    activeUsers.delete(userId);
+                    // Broadcast offline
+                    User.findById(userId).populate('friends').then(user => {
+                        if (user) {
+                            user.friends.forEach((friend) => {
+                                const friendSocketIds = activeUsers.get(friend._id.toString());
+                                if (friendSocketIds) {
+                                    friendSocketIds.forEach(id => {
+                                        io.to(id).emit('friend_offline', { userId });
+                                    });
+                                }
+                            });
+                        }
+                    }).catch(() => { });
+                }
+            }
+        }
     });
 });
 // ─── Start ──────────────────────────────────────────────────────────
