@@ -168,6 +168,8 @@ export interface ChessGameOptions {
 }
 
 // ─── Exported Interface ─────────────────────────────────────────────
+export type GameOverReason = 'checkmate' | 'stalemate' | 'threefold' | 'insufficient' | 'timeout' | 'resignation' | 'draw';
+
 export interface PendingPromotion {
     from: string;
     to: string;
@@ -200,6 +202,10 @@ export interface ChessGameState {
     cancelPromotion: () => void;
     playerColor: 'w' | 'b' | null;
     isOnline: boolean;
+    gameOverReason: GameOverReason | null;
+    winner: 'w' | 'b' | 'draw' | null;
+    handleTimeout: (loserColor: 'w' | 'b') => void;
+    handleResignation: (loserColor: 'w' | 'b') => void;
 }
 
 // ─── Hook — Pure Game Logic (no socket knowledge) ───────────────────
@@ -227,6 +233,8 @@ export function useChessGame(options: ChessGameOptions = {}): ChessGameState {
     const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
     const [legalMoveSquares, setLegalMoveSquares] = useState<Square[]>([]);
     const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
+    const [gameOverReason, setGameOverReason] = useState<GameOverReason | null>(null);
+    const [winner, setWinner] = useState<'w' | 'b' | 'draw' | null>(null);
     const hasPlayedStartSound = useRef(false);
 
     const syncState = useCallback(() => {
@@ -234,6 +242,23 @@ export function useChessGame(options: ChessGameOptions = {}): ChessGameState {
         setPosition(game.fen());
         setMoveHistory([...game.history({ verbose: true })]);
         saveGame(game);
+
+        if (game.isCheckmate()) {
+            setGameOverReason('checkmate');
+            setWinner(game.turn() === 'w' ? 'b' : 'w');
+        } else if (game.isStalemate()) {
+            setGameOverReason('stalemate');
+            setWinner('draw');
+        } else if (game.isThreefoldRepetition()) {
+            setGameOverReason('threefold');
+            setWinner('draw');
+        } else if (game.isInsufficientMaterial()) {
+            setGameOverReason('insufficient');
+            setWinner('draw');
+        } else if (game.isDraw()) {
+            setGameOverReason('draw');
+            setWinner('draw');
+        }
     }, []);
 
     // Play game-start sound on mount
@@ -249,7 +274,7 @@ export function useChessGame(options: ChessGameOptions = {}): ChessGameState {
     const isCheckmate = gameRef.current.isCheckmate();
     const isDraw = gameRef.current.isDraw();
     const isStalemate = gameRef.current.isStalemate();
-    const isGameOver = gameRef.current.isGameOver();
+    const isGameOver = gameRef.current.isGameOver() || gameOverReason !== null;
     const kingSquare = isCheck ? findKingSquare(gameRef.current, turn) : null;
 
     // ── Core move executor ────────────────────────────────────────────
@@ -468,10 +493,24 @@ export function useChessGame(options: ChessGameOptions = {}): ChessGameState {
         setLastMove(null);
         setSelectedSquare(null);
         setLegalMoveSquares([]);
+        setGameOverReason(null);
+        setWinner(null);
         clearSavedGame();
         syncState();
         playSound('gameStart');
     }, [syncState]);
+
+    const handleTimeout = useCallback((loserColor: 'w' | 'b') => {
+        setGameOverReason('timeout');
+        setWinner(loserColor === 'w' ? 'b' : 'w');
+        playSound('gameEnd');
+    }, []);
+
+    const handleResignation = useCallback((loserColor: 'w' | 'b') => {
+        setGameOverReason('resignation');
+        setWinner(loserColor === 'w' ? 'b' : 'w');
+        playSound('gameEnd');
+    }, []);
 
     const loadState = useCallback((fen: string, history: Move[]) => {
         try {
@@ -513,5 +552,9 @@ export function useChessGame(options: ChessGameOptions = {}): ChessGameState {
         cancelPromotion,
         playerColor,
         isOnline,
+        gameOverReason,
+        winner,
+        handleTimeout,
+        handleResignation,
     };
 }

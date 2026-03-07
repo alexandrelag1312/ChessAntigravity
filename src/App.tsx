@@ -11,6 +11,7 @@ import Lobby from './components/Lobby';
 import Chat from './components/Chat';
 import PromotionOverlay from './components/PromotionOverlay';
 import ChessClock from './components/ChessClock';
+import GameOverModal from './components/GameOverModal';
 import { motion } from 'framer-motion';
 import { themes, defaultTheme, type BoardTheme } from './logic/themes';
 
@@ -146,6 +147,31 @@ export default function App() {
 
     return () => { if (clockIntervalRef.current) clearInterval(clockIntervalRef.current); };
   }, [appMode, socket.isOnline, gameState.turn, gameState.moveHistory.length, gameState.isGameOver]);
+
+  // Timeout detection & Game Over Modal Triggers
+  const [showGameOverModal, setShowGameOverModal] = useState(false);
+
+  useEffect(() => {
+    if (appMode !== 'multiplayer' || !socket.isOnline || gameState.isGameOver) return;
+    if (clockWhite <= 0) gameState.handleTimeout('w');
+    else if (clockBlack <= 0) gameState.handleTimeout('b');
+  }, [clockWhite, clockBlack, appMode, socket.isOnline, gameState]);
+
+  useEffect(() => {
+    if (socket.resignationEvent && !gameState.isGameOver) {
+      gameState.handleResignation(socket.resignationEvent.loserColor);
+    }
+  }, [socket.resignationEvent, gameState]);
+
+  useEffect(() => {
+    if (gameState.isGameOver && gameState.gameOverReason) {
+      // Small delay for dramatic effect
+      const timer = setTimeout(() => setShowGameOverModal(true), 500);
+      return () => clearTimeout(timer);
+    } else {
+      setShowGameOverModal(false);
+    }
+  }, [gameState.isGameOver, gameState.gameOverReason]);
 
   // Time pressure bip: play every 5s when your clock < 30s
   const lastBipTime = useRef<number>(0);
@@ -425,12 +451,19 @@ export default function App() {
                       {socket.remoteState?.spectatorCount || 0} spectator{socket.remoteState?.spectatorCount !== 1 ? 's' : ''}
                     </span>
                   </div>
-                  <button onClick={socket.leaveRoom} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors text-xs font-bold">
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                    Leave
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {socket.role !== 'spectator' && !gameState.isGameOver && (
+                      <button onClick={socket.emitResign} className="px-3 py-1.5 rounded-lg bg-surface border border-border text-text-muted hover:text-text-primary transition-colors text-xs font-bold">
+                        Resign
+                      </button>
+                    )}
+                    <button onClick={socket.leaveRoom} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors text-xs font-bold">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                      Leave
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -460,6 +493,21 @@ export default function App() {
       {appMode === 'multiplayer' && socket.roomId && (
         <Chat messages={socket.chatMessages} onSendMessage={socket.sendChat} />
       )}
+
+      {/* Game Over Modal */}
+      <GameOverModal
+        isOpen={showGameOverModal}
+        reason={gameState.gameOverReason}
+        winner={gameState.winner}
+        playerColor={socket.playerColor}
+        whitePlayerName={appMode === 'multiplayer' ? (socket.remoteState?.playerWhite?.name || 'White') : 'White'}
+        blackPlayerName={appMode === 'multiplayer' ? (socket.remoteState?.playerBlack?.name || 'Black') : 'Black'}
+        onNewGame={() => {
+          setShowGameOverModal(false);
+          handleNewGame();
+        }}
+        onReviewBoard={() => setShowGameOverModal(false)}
+      />
     </div>
   );
 }

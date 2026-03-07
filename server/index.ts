@@ -358,6 +358,30 @@ io.on('connection', (socket) => {
         }
     });
 
+    // ── Resignation ─────────────────────────────────────────────────
+    socket.on('resign', () => {
+        const roomId = socketToRoom.get(socket.id);
+        if (!roomId) return;
+        const room = rooms.get(roomId);
+        if (!room) return;
+
+        const role = getRoomRole(room, socket.id);
+        if (role !== 'white' && role !== 'black') return;
+
+        const loserColor = role === 'white' ? 'w' : 'b';
+        const loserName = role === 'white' ? room.playerWhite?.name : room.playerBlack?.name;
+
+        room.chatHistory.push({
+            sender: '📢 System',
+            text: `${loserName} has resigned.`,
+            timestamp: Date.now(),
+        });
+
+        console.log(`[resign] ${role} resigned in ${roomId}`);
+        io.to(roomId).emit('opponent_resigned', { loserColor });
+        io.to(roomId).emit('sync_state', getRoomSnapshot(room));
+    });
+
     // ── New Game (both players must be present) ─────────────────────
     socket.on('new_game', () => {
         const roomId = socketToRoom.get(socket.id);

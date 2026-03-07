@@ -45,6 +45,11 @@ export function useSocket() {
         timestamp: number;
     } | null>(null);
 
+    const [resignationEvent, setResignationEvent] = useState<{
+        loserColor: 'w' | 'b';
+        timestamp: number;
+    } | null>(null);
+
     // ── THE SINGLE SOURCE OF TRUTH for player identity ──────────────
     const [playerColor, setPlayerColor] = useState<'w' | 'b' | null>(null);
     const [isOnline, setIsOnline] = useState(false);
@@ -136,6 +141,12 @@ export function useSocket() {
         newSocket.on('move_received', (move: { from: string; to: string; promotion?: string; clockWhite?: number; clockBlack?: number }) => {
             console.log('[socket] move_received:', move);
             setLastReceivedMove({ ...move, timestamp: Date.now() });
+        });
+
+        // ── Resignation ───────────────────────────────────────────────
+        newSocket.on('opponent_resigned', (data: { loserColor: 'w' | 'b' }) => {
+            console.log('[socket] opponent_resigned:', data);
+            setResignationEvent({ loserColor: data.loserColor, timestamp: Date.now() });
         });
 
         // ── Chat — Dedicated real-time listener ───────────────────────
@@ -232,6 +243,12 @@ export function useSocket() {
         });
     }, [role]);
 
+    const emitResign = useCallback(() => {
+        if (!socketRef.current || role === 'spectator') return;
+        console.log('[socket] emitting resign');
+        socketRef.current.emit('resign');
+    }, [role]);
+
     const sendChat = useCallback((text: string) => {
         if (!socketRef.current || !roomId) return;
         socketRef.current.emit('chat_message', { text });
@@ -247,10 +264,12 @@ export function useSocket() {
         playerColor,
         isOnline,
         chatMessages,
+        resignationEvent,
         createRoom,
         joinRoom,
         leaveRoom,
         emitMove,
+        emitResign,
         sendChat,
         lastReceivedMove,
     };
