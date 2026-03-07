@@ -4,9 +4,8 @@ import { useChessGame } from './hooks/useChessGame';
 import { useStockfish } from './hooks/useStockfish';
 import { useSocket } from './hooks/useSocket';
 import ChessBoard from './components/ChessBoard';
-import GameInfo from './components/GameInfo';
-import MoveHistory from './components/MoveHistory';
 import GameControls from './components/GameControls';
+import MoveHistory from './components/MoveHistory';
 import CapturedPieces from './components/CapturedPieces';
 import Lobby from './components/Lobby';
 import Chat from './components/Chat';
@@ -312,19 +311,6 @@ export default function App() {
               </div>
             )}
 
-            {/* ══ MOBILE-ONLY: opponent row (above board) ══ */}
-            {appMode === 'multiplayer' && socket.isOnline && (
-              <div className="flex items-center gap-2 px-1 lg:hidden">
-                <div className="w-4 h-4 rounded-full border-2 border-border shrink-0"
-                  style={{ backgroundColor: socket.playerColor === 'w' ? '#1a1a1a' : '#f5f5f5' }} />
-                <span className="text-sm font-semibold text-text-primary truncate flex-1">
-                  <span className="text-xs font-medium text-text-muted uppercase tracking-wider shrink-0">Opponent</span>
-                  {socket.playerColor === 'w'
-                    ? (socket.remoteState?.playerBlack?.name ?? '—')
-                    : (socket.remoteState?.playerWhite?.name ?? '—')}
-                </span>
-              </div>
-            )}
 
             {/* ══════════════════════ LEFT COLUMN (desktop) ════════════════════ */}
             <div className="flex flex-col gap-4 lg:order-1 order-last">
@@ -420,38 +406,22 @@ export default function App() {
                   className="py-2 rounded-lg text-xs font-bold bg-accent/15 text-accent border border-accent/25">⇅ Flip</button>
               </div>
 
-              <GameInfo
-                gameState={gameState}
-                aiEnabled={appMode === 'local' ? aiEnabled : false}
-                isAiThinking={engine.isThinking}
-              />
-
-              {appMode === 'multiplayer' && socket.remoteState && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="rounded-xl p-4 backdrop-blur-md border border-border text-sm flex flex-col gap-2"
-                  style={{ background: 'var(--color-surface-overlay)' }}
-                >
-                  <div className="flex justify-between items-center border-b border-border pb-2">
-                    <span className="font-semibold text-text-secondary">White</span>
-                    <span className={`font-bold ${socket.remoteState.playerWhite?.connected ? 'text-text-primary' : 'text-text-muted italic'}`}>
-                      {socket.remoteState.playerWhite?.name || 'Waiting...'}
-                      {!socket.remoteState.playerWhite?.connected && socket.remoteState.playerWhite?.name && ' (Offline)'}
+              {/* Room Controls */}
+              {appMode === 'multiplayer' && socket.roomId && (
+                <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-border bg-surface-raised mt-2 lg:mt-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">👥</span>
+                    <span className="text-sm font-medium text-text-secondary">
+                      {socket.remoteState?.spectatorCount || 0} spectator{socket.remoteState?.spectatorCount !== 1 ? 's' : ''}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center border-b border-border pb-2">
-                    <span className="font-semibold text-text-secondary">Black</span>
-                    <span className={`font-bold ${socket.remoteState.playerBlack?.connected ? 'text-text-primary' : 'text-text-muted italic'}`}>
-                      {socket.remoteState.playerBlack?.name || 'Waiting...'}
-                      {!socket.remoteState.playerBlack?.connected && socket.remoteState.playerBlack?.name && ' (Offline)'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center pt-1 text-xs text-text-muted">
-                    <span>Spectators: {socket.remoteState.spectatorCount}</span>
-                    <button onClick={socket.leaveRoom} className="text-red-400 hover:text-red-300 transition-colors">Leave Room</button>
-                  </div>
-                </motion.div>
+                  <button onClick={socket.leaveRoom} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors text-xs font-bold">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    Leave
+                  </button>
+                </div>
               )}
 
               <motion.div
