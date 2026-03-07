@@ -323,12 +323,6 @@ export default function App() {
                     ? (socket.remoteState?.playerBlack?.name ?? '—')
                     : (socket.remoteState?.playerWhite?.name ?? '—')}
                 </span>
-                <span className={`font-mono text-lg font-bold tabular-nums ${(boardOrientation === 'white' ? clockBlack : clockWhite) <= 30 ? 'text-red-400'
-                  : (boardOrientation === 'white' ? gameState.turn === 'b' : gameState.turn === 'w') ? 'text-accent'
-                    : 'text-text-secondary'
-                  }`}>
-                  {formatClock(boardOrientation === 'white' ? clockBlack : clockWhite)}
-                </span>
               </div>
             )}
 
@@ -397,58 +391,51 @@ export default function App() {
                   ? (socket.playerColor === 'w' ? (socket.remoteState?.playerWhite?.name ?? 'You') : (socket.remoteState?.playerBlack?.name ?? 'You'))
                   : 'You'}
               </span>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${(boardOrientation === 'white' ? gameState.turn === 'w' : gameState.turn === 'b')
+              <span className="text-xs px-2 py-0.5 rounded-full font-bold ${(boardOrientation === 'white' ? gameState.turn === 'w' : gameState.turn === 'b')
                 ? 'bg-accent text-white' : 'bg-surface-raised text-text-muted border border-border'
-                }`}>
+                }">
                 {(boardOrientation === 'white' ? gameState.turn === 'w' : gameState.turn === 'b') ? '▶ Your turn' : 'Waiting…'}
               </span>
-              {appMode === 'multiplayer' && socket.isOnline && (
-                <span className={`font-mono text-lg font-bold tabular-nums ${(boardOrientation === 'white' ? clockWhite : clockBlack) <= 30 ? 'text-red-400'
-                  : (boardOrientation === 'white' ? gameState.turn === 'w' : gameState.turn === 'b') ? 'text-accent'
-                    : 'text-text-secondary'
-                  }`}>
-                  {formatClock(boardOrientation === 'white' ? clockWhite : clockBlack)}
-                </span>
-              )}
-            </div>
-
-            {/* ══ MOBILE-ONLY: compact action buttons ══ */}
-            <div className="grid grid-cols-3 gap-2 px-1 lg:hidden">
-              <button onClick={handleNewGame}
-                className="py-2 rounded-lg text-xs font-bold bg-accent text-white">✦ New</button>
-              <button onClick={handleUndo}
-                disabled={appMode !== 'local' || gameState.moveHistory.length === 0}
-                className="py-2 rounded-lg text-xs font-bold bg-surface-raised border border-border text-text-primary disabled:opacity-40">↶ Undo</button>
-              <button onClick={flipBoard}
-                className="py-2 rounded-lg text-xs font-bold bg-accent/15 text-accent border border-accent/25">⇅ Flip</button>
             </div>
 
             {/* ══════════════════════ RIGHT COLUMN (desktop + mobile) ══════════ */}
             <div className="flex flex-col gap-4 lg:order-3">
 
-              {/* Desktop clocks */}
-              {appMode === 'multiplayer' && socket.isOnline && (
-                <div className="flex flex-col gap-2">
-                  <ChessClock
-                    timeSeconds={boardOrientation === 'white' ? clockBlack : clockWhite}
-                    isActive={boardOrientation === 'white' ? gameState.turn === 'b' : gameState.turn === 'w'}
-                    label={boardOrientation === 'white' ? 'Opponent' : 'You'}
-                    color={boardOrientation === 'white' ? 'b' : 'w'}
-                    playerName={boardOrientation === 'white'
-                      ? socket.remoteState?.playerBlack?.name
-                      : socket.remoteState?.playerWhite?.name}
-                  />
-                  <ChessClock
-                    timeSeconds={boardOrientation === 'white' ? clockWhite : clockBlack}
-                    isActive={boardOrientation === 'white' ? gameState.turn === 'w' : gameState.turn === 'b'}
-                    label={boardOrientation === 'white' ? 'You' : 'Opponent'}
-                    color={boardOrientation === 'white' ? 'w' : 'b'}
-                    playerName={boardOrientation === 'white'
-                      ? socket.remoteState?.playerWhite?.name
-                      : socket.remoteState?.playerBlack?.name}
-                  />
-                </div>
-              )}
+              {/* Clocks / Timers */}
+              {appMode === 'multiplayer' && socket.isOnline && (() => {
+                const myColor = socket.playerColor || (boardOrientation === 'white' ? 'w' : 'b');
+                const oppColor = myColor === 'w' ? 'b' : 'w';
+
+                return (
+                  <div className="flex flex-col gap-2">
+                    <ChessClock
+                      timeSeconds={oppColor === 'w' ? clockWhite : clockBlack}
+                      isActive={gameState.turn === oppColor}
+                      label="Opponent"
+                      color={oppColor}
+                      playerName={oppColor === 'w' ? socket.remoteState?.playerWhite?.name : socket.remoteState?.playerBlack?.name}
+                    />
+                    <ChessClock
+                      timeSeconds={myColor === 'w' ? clockWhite : clockBlack}
+                      isActive={gameState.turn === myColor}
+                      label="You"
+                      color={myColor}
+                      playerName={myColor === 'w' ? socket.remoteState?.playerWhite?.name : socket.remoteState?.playerBlack?.name}
+                    />
+                  </div>
+                );
+              })()}
+
+              {/* ══ MOBILE-ONLY: compact action buttons ══ */}
+              <div className="grid grid-cols-3 gap-2 lg:hidden mt-2">
+                <button onClick={handleNewGame}
+                  className="py-2 rounded-lg text-xs font-bold bg-accent text-white">✦ New</button>
+                <button onClick={handleUndo}
+                  disabled={appMode !== 'local' || gameState.moveHistory.length === 0}
+                  className="py-2 rounded-lg text-xs font-bold bg-surface-raised border border-border text-text-primary disabled:opacity-40">↶ Undo</button>
+                <button onClick={flipBoard}
+                  className="py-2 rounded-lg text-xs font-bold bg-accent/15 text-accent border border-accent/25">⇅ Flip</button>
+              </div>
 
               <GameInfo
                 gameState={gameState}
