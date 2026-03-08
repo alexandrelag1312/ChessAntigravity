@@ -15,23 +15,39 @@ dotenv.config();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_chess_antigravity';
 
 // ─── Database ───────────────────────────────────────────────────────
-const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URL || process.env.DATABASE_URL;
-if (!MONGODB_URI) {
-    console.warn('⚠️ NO MONGODB_URI PROVIDED - Attempting localhost fallback...');
-} else {
-    console.log(`[server] MONGODB_URI is configured (Starts with: ${MONGODB_URI.substring(0, 15)}...)`);
+let MONGODB_URI = '';
+let activeDbVariable = '';
+
+if (process.env.MONGODB_URI) {
+    MONGODB_URI = process.env.MONGODB_URI;
+    activeDbVariable = 'MONGODB_URI';
+} else if (process.env.MONGO_URL) {
+    MONGODB_URI = process.env.MONGO_URL;
+    activeDbVariable = 'MONGO_URL';
+} else if (process.env.DATABASE_URL) {
+    MONGODB_URI = process.env.DATABASE_URL;
+    activeDbVariable = 'DATABASE_URL';
 }
 
 const connectDB = async () => {
+    if (!MONGODB_URI) {
+        console.error('❌ FATAL ERROR: No Database Variable found in Environment.');
+        console.error('   -> Railway missing MONGODB_URI, MONGO_URL, or DATABASE_URL.');
+        console.error('   -> Aborting MongoDB connection attempt.');
+        return; // Bail out completely. No localhost fallback.
+    }
+
+    console.log(`[server] Using DB variable: ${activeDbVariable}`);
+
     try {
         mongoose.set('bufferCommands', false); // Fix: Do not wait 10s if DB is offline
-        await mongoose.connect(MONGODB_URI || 'mongodb://localhost:27017/chessantigravity', {
+        await mongoose.connect(MONGODB_URI, {
             serverSelectionTimeoutMS: 5000 // Non-blocking fast-fail
         });
         console.log('📦 Connected to MongoDB successfully');
     } catch (err: any) {
         console.error('❌ MongoDB Connection Error (Non-Blocking):', err.message);
-        console.error('   -> Have you properly set MONGODB_URI in your Railway Variables?');
+        console.error(`   -> Check the value of your ${activeDbVariable} in Railway Variables.`);
     }
 };
 
